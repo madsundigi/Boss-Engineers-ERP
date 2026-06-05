@@ -26,4 +26,7 @@
 \echo '== Part 7 : document numbering engine =='
 \ir 07_numbering.sql
 
+\echo '== Part 8 : RBAC (roles, permissions, grants, SoD) =='
+\ir 08_rbac.sql
+
 \echo '== Boss Engineers ERP schema build complete =='
