@@ -23,4 +23,7 @@
 \echo '== Part 6/6 : deferred FKs + automation + triggers + seed + roles + MVs =='
 \ir 06_constraints_automation.sql
 
+\echo '== Part 7 : document numbering engine =='
+\ir 07_numbering.sql
+
 \echo '== Boss Engineers ERP schema build complete =='
