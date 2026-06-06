@@ -1,0 +1,90 @@
+/* =====================================================================
+   Boss Engineers ERP — Design System : FOUNDATIONS (Design Tokens)
+   Enterprise, dense, neutral. Inspired by SAP Fiori, Oracle Redwood,
+   Microsoft Fluent / Dynamics 365. No decorative motion. System fonts.
+   All components consume these variables — never hard-code values.
+   ===================================================================== */
+:root {
+  /* ---- Color : neutral canvas & surfaces ---- */
+  --c-canvas:         #f3f4f6;   /* app background            */
+  --c-surface:        #ffffff;   /* cards, tables, panels     */
+  --c-surface-alt:    #fafbfc;   /* zebra rows, subtle fills  */
+  --c-surface-sunken: #eceef1;   /* wells, disabled fields    */
+  --c-border:         #d7dbe0;   /* default 1px dividers      */
+  --c-border-strong:  #b9bfc7;   /* emphasized borders        */
+
+  /* ---- Color : text ---- */
+  --c-text:           #1a1d21;   /* primary copy / data       */
+  --c-text-secondary: #4a5159;   /* labels, secondary         */
+  --c-text-muted:     #6b7480;   /* hints, meta, placeholders */
+  --c-text-disabled:  #9aa1ab;
+  --c-text-inverse:   #ffffff;
+
+  /* ---- Color : primary action (single accent — restrained) ---- */
+  --c-primary:        #0a6ed1;
+  --c-primary-hover:  #085caf;
+  --c-primary-active: #06498c;
+  --c-primary-subtle: #eaf3fb;   /* selected rows, active nav */
+  --c-focus:          #0a6ed1;   /* focus ring                */
+
+  /* ---- Color : semantic (text/border + subtle bg pairs) ---- */
+  --c-success:        #167d3f;  --c-success-bg:#e7f4ec;  --c-success-border:#bfe2cd;
+  --c-warning:        #9a6700;  --c-warning-bg:#fdf3e0;  --c-warning-border:#f3dca6;
+  --c-error:          #c0322b;  --c-error-bg:  #fdeceb;  --c-error-border:  #f4c7c4;
+  --c-info:           #0a6ed1;  --c-info-bg:   #eaf3fb;  --c-info-border:   #c2dcf3;
+
+  /* ---- Color : ERP document-status palette (badges) ---- */
+  --c-status-draft:    #6b7480;  --c-status-draft-bg:#eceef1;
+  --c-status-pending:  #9a6700;  --c-status-pending-bg:#fdf3e0;
+  --c-status-progress: #0a6ed1;  --c-status-progress-bg:#eaf3fb;
+  --c-status-hold:     #b15c00;  --c-status-hold-bg:#fbeede;
+  --c-status-approved: #167d3f;  --c-status-approved-bg:#e7f4ec;
+  --c-status-rejected: #c0322b;  --c-status-rejected-bg:#fdeceb;
+  --c-status-closed:   #475467;  --c-status-closed-bg:#eef0f2;
+
+  /* ---- Application shell ---- */
+  --c-topbar-bg:#2b3a4a; --c-topbar-text:#ffffff; --c-topbar-muted:#aebac6; --c-topbar-border:#1f2a36;
+  --c-sidebar-bg:#ffffff; --c-sidebar-text:#3a424c; --c-sidebar-border:#e3e6ea;
+  --c-sidebar-hover:#f0f2f4; --c-sidebar-active-bg:#eaf3fb; --c-sidebar-active-text:#0a6ed1;
+  --c-sidebar-section:#8a929c;
+
+  /* ---- Typography (system stack, small base for data density) ---- */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+  --fs-11:11px; --fs-12:12px; --fs-13:13px; --fs-14:14px; --fs-16:16px; --fs-18:18px; --fs-20:20px; --fs-24:24px;
+  --fw-regular:400; --fw-medium:500; --fw-semibold:600; --fw-bold:700;
+  --lh-tight:1.3; --lh-normal:1.45;
+
+  /* ---- Spacing scale (4px base) ---- */
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px; --sp-8:32px; --sp-10:40px;
+
+  /* ---- Radius (minimal — enterprise, not playful) ---- */
+  --r-sm:2px; --r-md:4px; --r-pill:999px;
+
+  /* ---- Elevation (subtle; flat by default, depth only for overlays) ---- */
+  --shadow-card:    0 1px 2px rgba(16,24,40,.06), 0 1px 1px rgba(16,24,40,.04);
+  --shadow-popover: 0 4px 12px rgba(16,24,40,.12);
+  --shadow-modal:   0 8px 28px rgba(16,24,40,.18);
+
+  /* ---- Layout metrics ---- */
+  --topbar-h:48px; --sidebar-w:240px; --sidebar-w-collapsed:48px;
+  --content-pad:24px; --page-max:1440px;
+
+  /* ---- Density (row & control heights) — default = standard ---- */
+  --row-h:40px; --control-h:32px; --field-gap:var(--sp-4);
+
+  /* ---- Z-index scale ---- */
+  --z-sidebar:100; --z-topbar:200; --z-dropdown:1000; --z-toast:1100;
+  --z-backdrop:1190; --z-modal:1200;
+
+  /* ---- Motion (functional only; <=120ms; no decorative animation) ---- */
+  --motion-fast:100ms; --ease:cubic-bezier(.2,0,.38,.9);
+}
+
+/* Compact density mode — flip one class on <body> for high-volume screens */
+body.density-compact { --row-h:32px; --control-h:28px; --field-gap:var(--sp-3); }
+
+/* Respect OS reduced-motion (and our own restraint): disable transitions */
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boss Engineers ERP — Design System</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components.css">
+</head>
+<body>
+<div class="erp-shell" id="shell">
+
+  <!-- 2. TOPBAR -->
+  <header class="erp-topbar">
+    <button class="erp-topbar__burger" title="Toggle navigation" onclick="document.getElementById('shell').classList.toggle('erp-shell--collapsed')">☰</button>
+    <div class="erp-topbar__brand"><span class="erp-topbar__logo">BE</span> Boss Engineers ERP</div>
+    <div class="erp-topbar__search"><input type="search" placeholder="Search projects, POs, customers…  (Ctrl+/)"></div>
+    <div class="erp-topbar__spacer"></div>
+    <div class="erp-topbar__actions">
+      <button class="erp-topbar__icon" title="Approvals">✔<span class="erp-topbar__badge">7</span></button>
+      <button class="erp-topbar__icon" title="Notifications">🔔<span class="erp-topbar__badge">3</span></button>
+      <button class="erp-topbar__icon" title="Help">?</button>
+      <div class="erp-topbar__user"><span class="erp-avatar">ST</span><span>S. Thakur</span></div>
+    </div>
+  </header>
+
+  <!-- 3. SIDEBAR -->
+  <nav class="erp-sidebar">
+    <div class="erp-nav__section">Sales</div>
+    <a class="erp-nav__item"><span class="erp-nav__icon">▷</span> Enquiries</a>
+    <a class="erp-nav__item"><span class="erp-nav__icon">▷</span> Quotations <span class="erp-nav__count">12</span></a>
+    <div class="erp-nav__section">Operations</div>
+    <a class="erp-nav__item is-active"><span class="erp-nav__icon">▣</span> Purchase Orders <span class="erp-nav__count">34</span></a>
+    <a class="erp-nav__item"><span class="erp-nav__icon">▤</span> Inventory</a>
+    <a class="erp-nav__item"><span class="erp-nav__icon">⚙</span> Production</a>
+    <a class="erp-nav__item"><span class="erp-nav__icon">✔</span> Approvals <span class="erp-nav__count">7</span></a>
+    <div class="erp-nav__section">Finance</div>
+    <a class="erp-nav__item"><span class="erp-nav__icon">₹</span> Invoices</a>
+    <a class="erp-nav__item"><span class="erp-nav__icon">▦</span> Profitability</a>
+    <div class="erp-nav__section">System</div>
+    <a class="erp-nav__item"><span class="erp-nav__icon">◷</span> Audit Log</a>
+  </nav>
+
+  <!-- 1. CONTENT / PAGE LAYOUT -->
+  <main class="erp-content">
+   <div class="erp-page erp-stack">
+
+    <div class="erp-breadcrumb"><a>Home</a><span>/</span><a>Operations</a><span>/</span>Purchase Orders</div>
+    <div class="erp-page__head">
+      <div>
+        <h1 class="erp-page__title">Purchase Orders</h1>
+        <div class="erp-page__subtitle">Mumbai Plant · FY 2026-27</div>
+      </div>
+      <div class="erp-row">
+        <button class="erp-btn">Export</button>
+        <button class="erp-btn erp-btn--primary" onclick="openModal()">+ New PO</button>
+      </div>
+    </div>
+
+    <!-- 10. NOTIFICATION (inline banner) -->
+    <div class="erp-alert erp-alert--warning">
+      <span class="erp-alert__icon">!</span>
+      <div class="erp-alert__body"><div class="erp-alert__title">3 critical-item POs are awaiting your approval</div>
+      Long-lead items for project PRJ/MUM/2026-27/00012 must be ordered within 2 days to hold the schedule.</div>
+    </div>
+
+    <!-- 8. DASHBOARD (KPI tiles) -->
+    <div class="erp-dash-grid">
+      <div class="erp-kpi erp-kpi--accent"><div class="erp-kpi__label">Open PO Value</div>
+        <div class="erp-kpi__value num">₹4.82 Cr</div><div class="erp-kpi__delta erp-kpi__delta--up">▲ 6.4% vs last month</div></div>
+      <div class="erp-kpi"><div class="erp-kpi__label">Awaiting Approval</div>
+        <div class="erp-kpi__value num">7</div><div class="erp-kpi__delta text-muted">2 overdue</div></div>
+      <div class="erp-kpi"><div class="erp-kpi__label">On-Time Vendor Delivery</div>
+        <div class="erp-kpi__value num">91%</div><div class="erp-kpi__delta erp-kpi__delta--up">▲ 1.2%</div></div>
+      <div class="erp-kpi"><div class="erp-kpi__label">Avg PO Cycle Time</div>
+        <div class="erp-kpi__value num">3.4 d</div><div class="erp-kpi__delta erp-kpi__delta--down">▼ 0.5 d</div></div>
+    </div>
+
+    <!-- 6. TABLE (data grid with bulk bar, sort, status pills, pagination) -->
+    <section class="erp-card">
+      <div class="erp-table-toolbar">
+        <span class="erp-table-toolbar__title">All Purchase Orders <span class="erp-table-toolbar__count">· 34 records</span></span>
+        <div class="erp-table-toolbar__spacer"></div>
+        <button class="erp-btn erp-btn--sm">Filter</button>
+        <button class="erp-btn erp-btn--sm">Columns</button>
+      </div>
+      <div class="erp-table__bulkbar"><strong>2 selected</strong>
+        <button class="erp-btn erp-btn--sm erp-btn--primary">Approve</button>
+        <button class="erp-btn erp-btn--sm">Export</button>
+        <div style="flex:1"></div><a>Clear</a></div>
+      <div class="erp-table-wrap">
+        <table class="erp-table">
+          <thead><tr>
+            <th class="col-check"><input type="checkbox"></th>
+            <th class="is-sortable">PO Number <span class="sort-ind">▼</span></th>
+            <th>Vendor</th><th>Project</th>
+            <th class="col-num">Value (₹)</th><th>Need By</th><th>Status</th>
+          </tr></thead>
+          <tbody>
+            <tr class="is-selected"><td class="col-check"><input type="checkbox" checked></td>
+              <td class="mono">PO/MUM/2026-27/000231</td><td>Sandvik Asia Pvt Ltd</td><td class="mono">PRJ…00012</td>
+              <td class="col-num">12,40,000</td><td>12 Jun 2026</td><td><span class="erp-badge erp-badge--pending">Pending</span></td></tr>
+            <tr class="is-selected"><td class="col-check"><input type="checkbox" checked></td>
+              <td class="mono">PO/MUM/2026-27/000230</td><td>Bosch Rexroth India</td><td class="mono">PRJ…00012</td>
+              <td class="col-num">8,15,500</td><td>18 Jun 2026</td><td><span class="erp-badge erp-badge--pending">Pending</span></td></tr>
+            <tr><td class="col-check"><input type="checkbox"></td>
+              <td class="mono">PO/MUM/2026-27/000229</td><td>SKF India</td><td class="mono">PRJ…00009</td>
+              <td class="col-num">2,30,000</td><td>09 Jun 2026</td><td><span class="erp-badge erp-badge--approved">Approved</span></td></tr>
+            <tr><td class="col-check"><input type="checkbox"></td>
+              <td class="mono">PO/MUM/2026-27/000228</td><td>Siemens Ltd</td><td class="mono">PRJ…00011</td>
+              <td class="col-num">19,90,000</td><td>25 Jun 2026</td><td><span class="erp-badge erp-badge--progress">In Transit</span></td></tr>
+            <tr><td class="col-check"><input type="checkbox"></td>
+              <td class="mono">PO/MUM/2026-27/000227</td><td>L&amp;T Valves</td><td class="mono">PRJ…00008</td>
+              <td class="col-num">1,05,750</td><td>—</td><td><span class="erp-badge erp-badge--rejected">Rejected</span></td></tr>
+            <tr><td class="col-check"><input type="checkbox"></td>
+              <td class="mono">PO/MUM/2026-27/000226</td><td>Grundfos Pumps</td><td class="mono">PRJ…00007</td>
+              <td class="col-num">3,60,000</td><td>—</td><td><span class="erp-badge erp-badge--draft">Draft</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="erp-pagination"><span>Rows per page: 25</span><div class="erp-pagination__spacer"></div>
+        <span>1–25 of 34</span>
+        <button class="erp-pagination__btn" disabled>‹</button>
+        <button class="erp-pagination__btn">›</button></div>
+    </section>
+
+    <!-- 11. APPROVAL SCREEN -->
+    <section class="erp-stack">
+      <h2 class="erp-page__title" style="font-size:var(--fs-16)">Approval — PO/MUM/2026-27/000231</h2>
+      <div class="erp-approval">
+        <div class="erp-approval__main">
+          <div class="erp-actionbar">
+            <div class="erp-actionbar__meta"><span class="erp-actionbar__doc">PO/MUM/2026-27/000231</span>
+              <span class="erp-actionbar__sub">Sandvik Asia · ₹12,40,000 · raised by R. Mehta</span></div>
+            <div class="erp-actionbar__spacer"></div>
+            <span class="erp-badge erp-badge--pending">Pending L2</span>
+            <button class="erp-btn erp-btn--danger" onclick="toast('PO rejected','error')">Reject</button>
+            <button class="erp-btn erp-btn--success" onclick="toast('PO approved','success')">Approve</button>
+          </div>
+          <div class="erp-panel"><div class="erp-panel__head">Document Details</div>
+            <div class="erp-panel__body">
+              <dl class="erp-deflist">
+                <dt>Vendor</dt><dd>Sandvik Asia Pvt Ltd</dd>
+                <dt>Project</dt><dd class="mono">PRJ/MUM/2026-27/00012</dd>
+                <dt>Total Value</dt><dd class="num">₹ 12,40,000</dd>
+                <dt>Budget Remaining</dt><dd class="num" style="color:var(--c-success)">₹ 38,60,000</dd>
+                <dt>Critical Item</dt><dd>Yes — long-lead (10 wk)</dd>
+                <dt>DOA Level</dt><dd>L2 (₹5L–₹25L) · Purchase Head</dd>
+              </dl>
+            </div></div>
+        </div>
+        <aside class="erp-panel"><div class="erp-panel__head">Approval Trail</div>
+          <div class="erp-panel__body">
+            <ul class="erp-timeline">
+              <li class="erp-timeline__item"><span class="erp-timeline__dot erp-timeline__dot--approved"></span>
+                <div class="erp-timeline__who">R. Mehta — Submitted</div>
+                <div class="erp-timeline__meta">06 Jun 2026, 10:24</div></li>
+              <li class="erp-timeline__item"><span class="erp-timeline__dot erp-timeline__dot--approved"></span>
+                <div class="erp-timeline__who">A. Nair — L1 Approved</div>
+                <div class="erp-timeline__meta">06 Jun 2026, 11:02</div>
+                <div class="erp-timeline__note">"Within project budget."</div></li>
+              <li class="erp-timeline__item"><span class="erp-timeline__dot erp-timeline__dot--current"></span>
+                <div class="erp-timeline__who">You — L2 Pending</div>
+                <div class="erp-timeline__meta">Awaiting decision</div></li>
+            </ul>
+          </div></aside>
+      </div>
+    </section>
+
+    <!-- 7. FORM -->
+    <section class="erp-card" style="padding:var(--sp-5)">
+      <form class="erp-form" onsubmit="event.preventDefault(); toast('Vendor saved','success')">
+        <div class="erp-form__section">
+          <div class="erp-form__legend">Create Vendor</div>
+          <div class="erp-form__grid">
+            <div class="erp-field erp-field--6"><label class="erp-label">Vendor Name <span class="req">*</span></label>
+              <input class="erp-input" value="Sandvik Asia Pvt Ltd"></div>
+            <div class="erp-field erp-field--3"><label class="erp-label">Vendor Code</label>
+              <input class="erp-input mono" value="V-000231" readonly></div>
+            <div class="erp-field erp-field--3"><label class="erp-label">Category</label>
+              <select class="erp-select"><option>Machined Components</option><option>Bearings</option></select></div>
+            <div class="erp-field erp-field--4 erp-field--error"><label class="erp-label">GSTIN <span class="req">*</span></label>
+              <input class="erp-input mono" value="27AAEC">
+              <span class="erp-field__error">Invalid GSTIN — must be 15 characters.</span></div>
+            <div class="erp-field erp-field--4"><label class="erp-label">Payment Terms</label>
+              <select class="erp-select"><option>Net 30</option><option>Net 45</option><option>Advance</option></select></div>
+            <div class="erp-field erp-field--4"><label class="erp-label">Lead Time (days)</label>
+              <input class="erp-input num" value="70"><span class="erp-field__hint">Used for critical-item planning.</span></div>
+            <div class="erp-field erp-field--12"><label class="erp-label">Address</label>
+              <textarea class="erp-textarea">MIDC, Pune 411019, Maharashtra</textarea></div>
+            <div class="erp-field erp-field--12"><label class="erp-check"><input type="checkbox" checked> Approved vendor (QA + Finance cleared)</label></div>
+          </div>
+        </div>
+        <div class="erp-form__actions">
+          <button type="button" class="erp-btn">Cancel</button>
+          <button type="submit" class="erp-btn erp-btn--primary">Save Vendor</button>
+        </div>
+      </form>
+    </section>
+
+   </div>
+  </main>
+</div>
+
+<!-- 9. MODAL (confirmation) -->
+<div id="modal" hidden>
+  <div class="erp-backdrop" onclick="closeModal()"></div>
+  <div class="erp-modal" role="dialog" aria-modal="true" aria-labelledby="m-title">
+    <div class="erp-modal__dialog">
+      <div class="erp-modal__head"><span class="erp-modal__title" id="m-title">Create Purchase Order</span>
+        <button class="erp-modal__close" onclick="closeModal()" aria-label="Close">×</button></div>
+      <div class="erp-modal__body">
+        <div class="erp-form__grid">
+          <div class="erp-field erp-field--12"><label class="erp-label">Vendor <span class="req">*</span></label>
+            <select class="erp-select"><option>Sandvik Asia Pvt Ltd</option><option>Bosch Rexroth India</option></select></div>
+          <div class="erp-field erp-field--6"><label class="erp-label">Project <span class="req">*</span></label>
+            <input class="erp-input mono" value="PRJ/MUM/2026-27/00012"></div>
+          <div class="erp-field erp-field--6"><label class="erp-label">Need By</label><input class="erp-input" type="date"></div>
+        </div>
+      </div>
+      <div class="erp-modal__foot"><button class="erp-btn" onclick="closeModal()">Cancel</button>
+        <button class="erp-btn erp-btn--primary" onclick="closeModal(); toast('Draft PO created','success')">Create</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- 10. TOAST region -->
+<div class="erp-toast-region" id="toasts"></div>
+
+<script>
+  function openModal(){ document.getElementById('modal').hidden=false; }
+  function closeModal(){ document.getElementById('modal').hidden=true; }
+  function toast(msg,kind){
+    var r=document.getElementById('toasts');
+    var t=document.createElement('div'); t.className='erp-toast'+(kind?' erp-toast--'+kind:'');
+    t.innerHTML='<div class="erp-toast__body"><div class="erp-toast__title">'+msg+'</div></div>'+
+                '<button class="erp-toast__close" aria-label="Dismiss">×</button>';
+    t.querySelector('.erp-toast__close').onclick=function(){ t.remove(); };
+    r.appendChild(t); setTimeout(function(){ t.remove(); },4000);
+  }
+</script>
+</body>
+</html>
