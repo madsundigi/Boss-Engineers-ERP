@@ -73,14 +73,15 @@
     {enquiryId:9,enquiryNo:'ENQ/PUN/2026-27/000005',customerName:'Bharat Forge',contact:'P. Desai',industry:'Forging',source:'PHONE',status:'LOST',createdAt:'2026-05-30'},
   ];
   const BADGE = {NEW:'draft',QUALIFIED:'progress',QUOTED:'hold',CONVERTED:'approved',LOST:'rejected',ON_HOLD:'hold'};
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function render(list){
     document.getElementById('rows').innerHTML = list.map(e => `
       <tr onclick="location.href='enquiry-detail.html'">
         <td class="col-check"><input type="checkbox" onclick="event.stopPropagation()"></td>
-        <td class="mono">${e.enquiryNo}</td><td>${e.customerName}</td><td>${e.contact??'—'}</td>
-        <td>${e.industry??'—'}</td><td>${e.source??'—'}</td>
-        <td><span class="erp-badge erp-badge--${BADGE[e.status]||'draft'}">${e.status}</span></td>
-        <td>${e.createdAt}</td></tr>`).join('');
+        <td class="mono">${esc(e.enquiryNo)}</td><td>${esc(e.customerName)}</td><td>${esc(e.contact??'—')}</td>
+        <td>${esc(e.industry??'—')}</td><td>${esc(e.source??'—')}</td>
+        <td><span class="erp-badge erp-badge--${BADGE[e.status]||'draft'}">${esc(e.status)}</span></td>
+        <td>${esc(e.createdAt)}</td></tr>`).join('');
     document.getElementById('count').textContent = '· ' + list.length + ' records';
     document.getElementById('pageinfo').textContent = '1–'+list.length+' of '+list.length;
     document.getElementById('navCount').textContent = list.length;

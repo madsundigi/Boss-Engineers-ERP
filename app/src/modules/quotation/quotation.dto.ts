@@ -20,7 +20,7 @@ export const createQuotationSchema = z.object({
   currencyCode: t(3).optional().default('INR'),
   totalCost: z.coerce.number().min(0).default(0),
   discountPct: z.coerce.number().min(0).max(100).optional().default(0),
-  lines: z.array(lineSchema).min(1, 'At least one line is required'),
+  lines: z.array(lineSchema).min(1, 'At least one line is required').max(500),
   enquiryId: z.coerce.number().int().positive().optional(),
 });
 export type CreateQuotationDto = z.infer<typeof createQuotationSchema>;
@@ -34,7 +34,7 @@ export const updateQuotationSchema = z.object({
   currencyCode: t(3).optional(),
   totalCost: z.coerce.number().min(0).optional(),
   discountPct: z.coerce.number().min(0).max(100).optional(),
-  lines: z.array(lineSchema).min(1).optional(),
+  lines: z.array(lineSchema).min(1).max(500).optional(),
   rowVersion: z.coerce.number().int().positive(),
 });
 export type UpdateQuotationDto = z.infer<typeof updateQuotationSchema>;
@@ -57,6 +57,7 @@ export const reviseSchema = z.object({
   reason: t(300).min(1, 'A revision reason is required'),
 });
 export const sendSchema = z.object({
+  rowVersion: z.coerce.number().int().positive(),
   to: z.string().trim().email().optional(),
   cc: z.string().trim().email().optional(),
   message: t(2000).optional(),

@@ -18,7 +18,7 @@ function quote(over: Partial<Quotation> = {}): Quotation {
     currentRevision: 0, subject: 'X', customerName: 'Acme', contact: null, email: 'a@a.com',
     quoteDate: '2026-06-06', validUntil: null, currencyCode: 'INR', totalCost: 80, totalPrice: 100,
     discountPct: 0, marginPct: 20, status: 'DRAFT', sentAt: null, sentTo: null, pdfRef: null,
-    createdAt: 't', rowVersion: 1, lines: [], ...over,
+    createdBy: 1, createdAt: 't', rowVersion: 1, lines: [], ...over,
   };
 }
 function deps() {
@@ -87,17 +87,17 @@ describe('QuotationService', () => {
   describe('send', () => {
     it('409 unless APPROVED/SENT', async () => {
       const d = deps(); d.repo.findById.mockResolvedValue(quote({ status: 'DRAFT' }));
-      await expect(code(d.svc.send(ctx, 1, {}))).resolves.toBe(409);
+      await expect(code(d.svc.send(ctx, 1, { rowVersion: 1 }))).resolves.toBe(409);
     });
     it('400 when no recipient', async () => {
       const d = deps(); d.repo.findById.mockResolvedValue(quote({ status: 'APPROVED', email: null }));
-      await expect(code(d.svc.send(ctx, 1, {}))).resolves.toBe(400);
+      await expect(code(d.svc.send(ctx, 1, { rowVersion: 1 }))).resolves.toBe(400);
     });
     it('generates PDF, emails it, and marks SENT', async () => {
       const d = deps();
       d.repo.findById.mockResolvedValue(quote({ status: 'APPROVED', email: 'a@a.com' }));
       d.repo.updateStatus.mockResolvedValue(quote({ status: 'SENT' }));
-      const out = await d.svc.send(ctx, 1, {});
+      const out = await d.svc.send(ctx, 1, { rowVersion: 1 });
       expect(d.pdf.generateQuotationPdf).toHaveBeenCalled();
       expect(d.email.send).toHaveBeenCalled();
       expect(out.messageId).toBe('m1');

@@ -51,15 +51,16 @@
   ];
   const BADGE={DRAFT:'draft',PENDING_APPROVAL:'pending',APPROVED:'progress',REJECTED:'rejected',SENT:'progress',NEGOTIATION:'hold',WON:'approved',LOST:'rejected'};
   const rev=n=>'Rev '+String.fromCharCode(65+(n%26));
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function render(list){
     document.getElementById('rows').innerHTML=list.map(q=>`
       <tr onclick="location.href='quotation-detail.html'">
         <td class="col-check"><input type="checkbox" onclick="event.stopPropagation()"></td>
-        <td class="mono">${q.quotationNo}</td><td>${rev(q.currentRevision)}</td><td>${q.customerName}</td>
+        <td class="mono">${esc(q.quotationNo)}</td><td>${rev(q.currentRevision)}</td><td>${esc(q.customerName)}</td>
         <td class="col-num">${Number(q.totalPrice).toLocaleString('en-IN')}</td>
         <td class="col-num">${Number(q.marginPct).toFixed(1)}%</td>
-        <td><span class="erp-badge erp-badge--${BADGE[q.status]||'draft'}">${q.status.replace('_',' ')}</span></td>
-        <td>${q.quoteDate}</td></tr>`).join('');
+        <td><span class="erp-badge erp-badge--${BADGE[q.status]||'draft'}">${esc(q.status.replace('_',' '))}</span></td>
+        <td>${esc(q.quoteDate)}</td></tr>`).join('');
     document.getElementById('count').textContent='· '+list.length+' records';
     document.getElementById('pageinfo').textContent='1–'+list.length+' of '+list.length;
     document.getElementById('navCount').textContent=list.length;

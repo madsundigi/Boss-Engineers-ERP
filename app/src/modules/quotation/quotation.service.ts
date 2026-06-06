@@ -9,8 +9,11 @@ import {
   CreateQuotationDto, UpdateQuotationDto, ConvertDto, SendDto, ListQueryDto,
 } from './quotation.dto';
 import { requiresApproval, revisionLabel, QuoteStatus } from './quotation.constants';
+import Decimal from 'decimal.js';
 
-const round = (n: number) => Math.round(n * 100) / 100;
+/** gross * (1 - discountPct/100), rounded to 2dp at the money boundary. */
+const applyDiscount = (gross: Decimal, discountPct: number): number =>
+  gross.mul(new Decimal(1).minus(new Decimal(discountPct).div(100))).toDecimalPlaces(2).toNumber();
 
 export interface SendResult { quotation: Quotation; messageId: string; to: string; }
 
@@ -25,9 +28,11 @@ export class QuotationService {
   private price(lines: { description: string; qty: number; unitPrice: number; isOptional?: boolean }[]) {
     const mapped: QuotationLine[] = lines.map((l) => ({
       description: l.description, qty: l.qty, unitPrice: l.unitPrice,
-      lineAmount: round(l.qty * l.unitPrice), isOptional: !!l.isOptional,
+      lineAmount: new Decimal(l.qty).mul(l.unitPrice).toDecimalPlaces(2).toNumber(), isOptional: !!l.isOptional,
     }));
-    const gross = mapped.filter((l) => !l.isOptional).reduce((s, l) => s + l.lineAmount, 0);
+    const gross = mapped
+      .filter((l) => !l.isOptional)
+      .reduce((s, l) => s.plus(new Decimal(l.qty).mul(l.unitPrice)), new Decimal(0));
     return { mapped, gross };
   }
 
@@ -37,7 +42,7 @@ export class QuotationService {
     const header: QuotationHeaderInput = {
       subject: dto.subject, customerName: dto.customerName, contact: dto.contact, email: dto.email,
       validUntil: dto.validUntil, currencyCode: dto.currencyCode, totalCost: dto.totalCost,
-      totalPrice: round(gross * (1 - dto.discountPct / 100)), discountPct: dto.discountPct, enquiryId: dto.enquiryId,
+      totalPrice: applyDiscount(gross, dto.discountPct), discountPct: dto.discountPct, enquiryId: dto.enquiryId,
     };
     return this.repo.create(ctx, header, mapped);
   }
@@ -83,10 +88,12 @@ export class QuotationService {
     let mapped: QuotationLine[] | undefined;
     if (lines) {
       const p = this.price(lines); mapped = p.mapped;
-      fields.totalPrice = round(p.gross * (1 - discountPct / 100));
+      fields.totalPrice = applyDiscount(p.gross, discountPct);
     } else if (dto.discountPct !== undefined) {
-      const gross = existing.lines.filter((l) => !l.isOptional).reduce((s, l) => s + l.lineAmount, 0);
-      fields.totalPrice = round(gross * (1 - discountPct / 100));
+      const gross = existing.lines
+        .filter((l) => !l.isOptional)
+        .reduce((s, l) => s.plus(new Decimal(l.qty).mul(l.unitPrice)), new Decimal(0));
+      fields.totalPrice = applyDiscount(gross, discountPct);
     }
     const updated = await this.repo.update(ctx, id, rowVersion, fields, mapped);
     if (!updated) throw Errors.conflict('Quotation was modified by someone else (row version mismatch)');
@@ -105,6 +112,9 @@ export class QuotationService {
 
   async approve(ctx: RequestContext, id: number, rowVersion: number): Promise<Quotation> {
     const existing = await this.getById(ctx, id);
+    if (existing.createdBy === ctx.userId) {
+      throw Errors.forbidden('Segregation of Duties: you cannot approve a quotation you created');
+    }
     if (existing.status !== 'PENDING_APPROVAL') throw Errors.conflict(`Only a PENDING_APPROVAL quote can be approved (status ${existing.status})`);
     const q = await this.repo.updateStatus(ctx, id, rowVersion, 'APPROVED', { decided_at: new Date(), decided_by: ctx.userId });
     if (!q) throw Errors.conflict('Row version mismatch');
@@ -160,8 +170,10 @@ export class QuotationService {
       text: dto.message ?? `Dear ${existing.contact ?? existing.customerName},\n\nPlease find attached our quotation ${existing.quotationNo}.\n\nRegards,\nBoss Engineers`,
       attachments: [{ filename: `${existing.quotationNo}.pdf`, content: pdf, contentType: 'application/pdf' }],
     });
-    const q = await this.repo.updateStatus(ctx, id, null, 'SENT', { sent_at: new Date(), sent_to: to, pdf_ref: pdfRef });
-    return { quotation: q!, messageId: sent.messageId, to };
+    // TODO(outbox): make email + state change atomic via transactional outbox (QA BW-02/CC-01)
+    const q = await this.repo.updateStatus(ctx, id, dto.rowVersion, 'SENT', { sent_at: new Date(), sent_to: to, pdf_ref: pdfRef });
+    if (!q) throw Errors.conflict('Row version mismatch');
+    return { quotation: q, messageId: sent.messageId, to };
   }
 
   async markWon(ctx: RequestContext, id: number, rowVersion: number): Promise<Quotation> {

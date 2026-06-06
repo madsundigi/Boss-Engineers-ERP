@@ -233,8 +233,9 @@
   function toast(msg,kind){
     var r=document.getElementById('toasts');
     var t=document.createElement('div'); t.className='erp-toast'+(kind?' erp-toast--'+kind:'');
-    t.innerHTML='<div class="erp-toast__body"><div class="erp-toast__title">'+msg+'</div></div>'+
+    t.innerHTML='<div class="erp-toast__body"><div class="erp-toast__title"></div></div>'+
                 '<button class="erp-toast__close" aria-label="Dismiss">×</button>';
+    t.querySelector('.erp-toast__title').textContent=msg;
     t.querySelector('.erp-toast__close').onclick=function(){ t.remove(); };
     r.appendChild(t); setTimeout(function(){ t.remove(); },4000);
   }

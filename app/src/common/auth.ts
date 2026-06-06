@@ -3,24 +3,61 @@ import { Pool } from 'pg';
 import { Errors } from './http-error';
 import { RequestContext } from './request-context';
 import { asyncHandler } from './async-handler';
+import { verifyAccessToken } from './jwt';
 
 /**
- * AuthService resolves the RequestContext for a request. In production the API
- * gateway verifies a JWT and injects identity/tenant; here (dev/test) we read
- * them from headers and load the user's effective permissions from the RBAC
- * tables. Permission resolution is always server-side from the database.
+ * AuthService resolves the RequestContext for a request.
+ *
+ * Identity/tenant resolution (VULN-A1): when an `Authorization: Bearer <token>`
+ * header is present AND `AUTH_JWT_SECRET` is configured, identity (user, company,
+ * business unit) is derived from the cryptographically verified JWT — never from
+ * raw, spoofable headers. If verification fails, the request is rejected 401.
+ *
+ * When no bearer token / secret is configured (dev/test), we fall back to the
+ * legacy `x-user-id`/`x-company-id`/`x-bu-id` headers. Either way, the user's
+ * effective permissions are always loaded server-side from the RBAC tables.
  */
 export class AuthService {
   constructor(private readonly pool: Pool) {}
 
-  async resolve(req: Request): Promise<RequestContext> {
+  /**
+   * Derive (userId, companyId, buId) for a request. Prefers a verified JWT;
+   * otherwise falls back to the dev identity headers (unchanged behavior).
+   */
+  private resolveIdentity(req: Request): {
+    userId: number;
+    companyId: number;
+    buId: number | null;
+  } {
+    const authHeader = req.header('authorization');
+    const bearer = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1];
+
+    if (bearer && process.env.AUTH_JWT_SECRET) {
+      const claims = verifyAccessToken(bearer);
+      if (!claims) throw Errors.unauthorized('Invalid or expired token');
+      return {
+        userId: claims.userId,
+        companyId: claims.companyId,
+        buId: claims.buId ?? null,
+      };
+    }
+
     const userId = Number(req.header('x-user-id'));
     const companyId = Number(req.header('x-company-id'));
     if (!Number.isInteger(userId) || userId <= 0) throw Errors.unauthorized('Missing x-user-id');
     if (!Number.isInteger(companyId) || companyId <= 0) throw Errors.unauthorized('Missing x-company-id');
 
     const buHeader = req.header('x-bu-id');
-    const buId = buHeader ? Number(buHeader) : null;
+    const headerBuId = buHeader ? Number(buHeader) : null;
+    return {
+      userId,
+      companyId,
+      buId: headerBuId && Number.isInteger(headerBuId) ? headerBuId : null,
+    };
+  }
+
+  async resolve(req: Request): Promise<RequestContext> {
+    const { userId, companyId, buId } = this.resolveIdentity(req);
 
     const userRes = await this.pool.query<{ username: string }>(
       'SELECT username FROM sec.app_user WHERE user_id = $1 AND is_active',
@@ -41,7 +78,7 @@ export class AuthService {
       userId,
       username: userRes.rows[0].username,
       companyId,
-      buId: buId && Number.isInteger(buId) ? buId : null,
+      buId,
       clientIp: req.ip ?? '0.0.0.0',
       sessionId: req.header('x-session-id') ?? `req-${Date.now()}`,
       permissions: new Set(permRes.rows.map((r) => r.perm_code)),

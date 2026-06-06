@@ -12,6 +12,11 @@
 ## Posture: **HIGH RISK — Not production-secure**
 **Findings: 19** — 🔴 Critical 1 · 🟠 High 10 · 🟡 Medium 5 · ⚪ Low/Info 3.
 
+> **Remediation status (2026-06-06):** A first hardening pass landed (verified, 65 tests green).
+> **Fixed:** XSS1/XSS2 (output escaping + textContent — proven inert), API1/RL1 (rate limiting), API2 (helmet), API3 (CORS allowlist), API4 (nodemailer ≥8.0.10 — `npm audit` 0), API6 (array bound), Z3 (SoD self-approval — code check + test).
+> **Mitigated/partial:** A1 (JWT verification added; dev-header fallback remains for non-prod), Z1 (RLS policies added, enforced under the `erp_app` role), P1/A2 (password hashing + policy util added; full login flow pending), Z2 (DOA `doa_rule` table added; runtime enforcement pending).
+> **Still open:** A3 (MFA), S1 (token refresh/revocation), and all operational items (backup/DR/monitoring) per PRODUCTION_READINESS.md. Re-test + pen-test still required before launch.
+
 > Strong foundations at the data layer (parameterized SQL, RBAC deny-by-default, tamper-evident audit). The **application security perimeter is largely unbuilt**: identity is trusted from headers, there is no rate limiting or security headers, the UI has a stored-XSS hole, authorization is table-level only (no row-scope / SoD / DOA), and a High-severity dependency CVE is open. **Do not expose this to untrusted networks until the Critical/High items are fixed.**
 
 Severity legend: 🔴 Critical (immediate, exploitable, high impact) · 🟠 High · 🟡 Medium · ⚪ Low/Info. CVSS values are indicative base scores.

@@ -15,7 +15,7 @@ function binaryParser(res: any, cb: (err: Error | null, body: Buffer) => void) {
 
 d('Quotation API (integration) — versioning, approval, PDF, email, enquiry sync', () => {
   let pool: Pool; let app: Express; let outbox: OutboxTransport;
-  let companyId: number, buId: number, sales: number, finance: number;
+  let companyId: number, buId: number, sales: number, finance: number, dual: number;
   let enqId: number, quoteId: number, v: number;
 
   const hdr = (u: number) => ({ 'x-user-id': String(u), 'x-company-id': String(companyId), 'x-bu-id': String(buId) });
@@ -29,6 +29,7 @@ d('Quotation API (integration) — versioning, approval, PDF, email, enquiry syn
     buId = Number((await one(`SELECT bu_id FROM mdm.business_unit WHERE bu_code='MUM' AND company_id=${companyId}`)).bu_id);
     sales = Number((await one(`SELECT user_id FROM sec.app_user WHERE username='sales_user'`)).user_id);
     finance = Number((await one(`SELECT user_id FROM sec.app_user WHERE username='finance_user'`)).user_id);
+    dual = Number((await one(`SELECT user_id FROM sec.app_user WHERE username='dual_user'`)).user_id);
 
     // a QUALIFIED enquiry to quote from
     const e = await request(app).post('/api/enquiries').set(hdr(sales))
@@ -78,8 +79,29 @@ d('Quotation API (integration) — versioning, approval, PDF, email, enquiry syn
     v = ok.body.rowVersion;
   });
 
+  it('blocks self-approval — Segregation of Duties (creator approves own quote -> 403)', async () => {
+    // dual_user holds BOTH SALES (create/edit) and FINANCE (approve) roles — the only
+    // way one user can both create and approve. Standard roles can't (FINANCE has no
+    // CREATE), so this is the case the code-level SoD check defends against.
+    const created = await request(app).post('/api/quotations').set(hdr(dual)).send({
+      customerName: 'SoD Test Co', totalCost: 100, discountPct: 0,
+      lines: [{ description: 'Widget', qty: 1, unitPrice: 200 }],
+    });
+    expect(created.status).toBe(201);
+    const sodId = created.body.quotationId; let sodV = created.body.rowVersion;
+
+    const submitted = await request(app).post(`/api/quotations/${sodId}/submit`).set(hdr(dual)).send({ rowVersion: sodV });
+    expect(submitted.status).toBe(200);
+    expect(submitted.body.quotation.status).toBe('PENDING_APPROVAL');
+    sodV = submitted.body.quotation.rowVersion;
+
+    // same user that created it tries to approve -> 403 (SoD), despite holding APPROVE.
+    const self = await request(app).post(`/api/quotations/${sodId}/approve`).set(hdr(dual)).send({ rowVersion: sodV });
+    expect(self.status).toBe(403);
+  });
+
   it('sends the quotation — generates a PDF and emails it (outbox)', async () => {
-    const res = await request(app).post(`/api/quotations/${quoteId}/send`).set(hdr(sales)).send({});
+    const res = await request(app).post(`/api/quotations/${quoteId}/send`).set(hdr(sales)).send({ rowVersion: v });
     expect(res.status).toBe(200);
     expect(res.body.quotation.status).toBe('SENT');
     expect(res.body.messageId).toBeTruthy();

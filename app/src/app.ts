@@ -1,6 +1,8 @@
 import express, { Express } from 'express';
 import { Pool } from 'pg';
 import { AuthService, authenticate } from './common/auth';
+import { securityMiddlewares } from './common/security';
+import { httpLogger } from './common/logger';
 import { errorMiddleware } from './common/error-middleware';
 import { enquiryRouter } from './modules/enquiry/enquiry.routes';
 import { quotationRouter } from './modules/quotation/quotation.routes';
@@ -17,6 +19,8 @@ export interface AppDeps {
  */
 export function createApp(pool: Pool, deps: AppDeps = {}): Express {
   const app = express();
+  app.use(httpLogger);                 // structured request logging (silent in tests)
+  app.use(...securityMiddlewares());   // helmet + CORS allowlist + rate limiting
   app.use(express.json({ limit: '256kb' }));
 
   app.get('/health', (_req, res) => res.json({ status: 'ok' }));

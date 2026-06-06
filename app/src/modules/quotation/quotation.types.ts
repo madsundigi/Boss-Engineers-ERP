@@ -31,6 +31,7 @@ export interface Quotation {
   sentAt: string | null;
   sentTo: string | null;
   pdfRef: string | null;
+  createdBy: number | null;
   createdAt: string;
   rowVersion: number;
   lines: QuotationLine[];

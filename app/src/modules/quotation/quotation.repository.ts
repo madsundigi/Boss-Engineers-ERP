@@ -8,7 +8,7 @@ import { DOC_TYPE, QuoteStatus } from './quotation.constants';
 const H = `quotation_id, quotation_no, company_id, bu_id, enquiry_id, current_revision,
   subject, customer_name, contact_person AS contact, email, quote_date, valid_until,
   currency_code, total_cost, total_price, discount_pct, margin_pct, status,
-  sent_at, sent_to, pdf_ref, created_at, row_version`;
+  sent_at, sent_to, pdf_ref, created_by, created_at, row_version`;
 
 type Header = Omit<Quotation, 'lines'>;
 
@@ -21,6 +21,7 @@ function mapHeader(r: QueryResultRow): Header {
     currencyCode: r.currency_code, totalCost: Number(r.total_cost), totalPrice: Number(r.total_price),
     discountPct: Number(r.discount_pct), marginPct: r.margin_pct == null ? 0 : Number(r.margin_pct),
     status: r.status, sentAt: r.sent_at, sentTo: r.sent_to, pdfRef: r.pdf_ref,
+    createdBy: r.created_by == null ? null : Number(r.created_by),
     createdAt: r.created_at, rowVersion: Number(r.row_version),
   };
 }

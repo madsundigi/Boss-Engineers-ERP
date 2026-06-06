@@ -15,6 +15,8 @@ Every module searched for **Missing Validation · Broken Workflow · Permission 
 
 **Summary:** 34 issues — **S1: 4 · S2: 16 · S3: 12 · S4: 2**. Top blockers: gateway/JWT trust, cross-module non-atomicity, missing row-level data scope, SoD/DOA not enforced, inventory reservation race.
 
+> **Remediation status (2026-06-06)** — first hardening pass (65 tests green). **Fixed:** RC-01 (double-convert unique index), RC-02 (send optimistic lock), MV-02 (bu/company composite FK), MV-03 (decimal money), MV-06 (array bound), PI-03 (SoD self-approval). **Mitigated:** PI-01 (RLS policies, erp_app role), MV-01/PI-04 (JWT verify added; gateway still required in prod), PI-02 (doa_rule table; enforcement pending). **Still open:** BW-01/BW-02/CC-01 (transactional outbox — TODO marked in `send`), BW-04 (semantic audit events), DL-02 (idempotency keys), DL-01 (backup/DR), RC-03 (inventory reservation lock — pre-M06).
+
 ---
 
 ## A. Missing Validation

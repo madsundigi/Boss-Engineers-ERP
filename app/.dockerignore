@@ -1,0 +1,23 @@
+# Build artifacts & deps are produced inside the image; never copy them in.
+node_modules
+dist
+
+# Secrets must never enter the build context / image layers.
+.env
+.env.*
+
+# Tests and docs are not needed at runtime.
+test
+**/*.test.ts
+*.md
+**/*.md
+
+# Local noise.
+.git
+.gitignore
+.github
+npm-debug.log*
+coverage
+.DS_Store
+Dockerfile
+.dockerignore
