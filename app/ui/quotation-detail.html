@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quotation Detail — Boss Engineers ERP</title>
+<link rel="stylesheet" href="../../design-system/tokens.css">
+<link rel="stylesheet" href="../../design-system/components.css">
+</head>
+<body>
+<div class="erp-shell">
+  <header class="erp-topbar">
+    <div class="erp-topbar__brand"><span class="erp-topbar__logo">BE</span> Boss Engineers ERP</div>
+    <div class="erp-topbar__spacer"></div>
+    <div class="erp-topbar__actions"><div class="erp-topbar__user"><span class="erp-avatar">ST</span><span>S. Thakur</span></div></div>
+  </header>
+  <nav class="erp-sidebar">
+    <div class="erp-nav__section">Sales</div>
+    <a class="erp-nav__item" href="enquiry-list.html"><span class="erp-nav__icon">▷</span> Enquiries</a>
+    <a class="erp-nav__item is-active" href="quotation-list.html"><span class="erp-nav__icon">▷</span> Quotations</a>
+  </nav>
+  <main class="erp-content"><div class="erp-page erp-stack">
+    <div class="erp-breadcrumb"><a href="quotation-list.html">Quotations</a><span>/</span>QTN/MUM/2026-27/000001</div>
+    <div class="erp-approval">
+      <div class="erp-approval__main">
+        <div class="erp-actionbar">
+          <div class="erp-actionbar__meta"><span class="erp-actionbar__doc">QTN/MUM/2026-27/000001 · Rev B</span>
+            <span class="erp-actionbar__sub">Tata Projects Ltd · from ENQ/MUM/2026-27/000003</span></div>
+          <div class="erp-actionbar__spacer"></div>
+          <span class="erp-badge erp-badge--progress">SENT</span>
+          <a class="erp-btn" href="#" onclick="toast('Downloading PDF…')">⤓ PDF</a>
+          <button class="erp-btn" onclick="toast('Quotation re-sent to customer','success')">Re-send</button>
+          <button class="erp-btn erp-btn--danger" onclick="toast('Marked LOST','error')">Lost</button>
+          <button class="erp-btn erp-btn--success" onclick="toast('Marked WON — enquiry converted','success')">Won</button>
+        </div>
+
+        <div class="erp-panel"><div class="erp-panel__head">Line Items</div>
+          <div class="erp-table-wrap"><table class="erp-table">
+            <thead><tr><th>#</th><th>Description</th><th class="col-num">Qty</th>
+              <th class="col-num">Unit Price (₹)</th><th class="col-num">Amount (₹)</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td>EOT Crane 50T, 28m span, cabin operation</td><td class="col-num">2</td>
+                <td class="col-num">50,00,000</td><td class="col-num">1,00,00,000</td></tr>
+              <tr><td>2</td><td>Spares kit (optional)</td><td class="col-num">1</td>
+                <td class="col-num">3,50,000</td><td class="col-num text-muted">3,50,000 (opt)</td></tr>
+            </tbody>
+          </table></div>
+          <div class="erp-panel__body">
+            <dl class="erp-deflist">
+              <dt>Discount</dt><dd>5%</dd>
+              <dt>Total Price</dt><dd class="num"><strong>₹ 95,00,000</strong></dd>
+              <dt>Internal Cost</dt><dd class="num text-muted">₹ 80,00,000</dd>
+              <dt>Margin</dt><dd class="num" style="color:var(--c-success)">15.8%</dd>
+              <dt>Valid Until</dt><dd>06 Jul 2026</dd>
+            </dl>
+          </div>
+        </div>
+      </div>
+
+      <aside class="erp-stack">
+        <div class="erp-panel"><div class="erp-panel__head">Approval Trail</div><div class="erp-panel__body">
+          <ul class="erp-timeline">
+            <li class="erp-timeline__item"><span class="erp-timeline__dot erp-timeline__dot--approved"></span>
+              <div class="erp-timeline__who">Submitted — Sales User</div><div class="erp-timeline__meta">06 Jun, 11:02</div></li>
+            <li class="erp-timeline__item"><span class="erp-timeline__dot erp-timeline__dot--approved"></span>
+              <div class="erp-timeline__who">Approved — Finance</div><div class="erp-timeline__meta">06 Jun, 11:40</div>
+              <div class="erp-timeline__note">Margin 15.8% ≥ 15% threshold</div></li>
+            <li class="erp-timeline__item"><span class="erp-timeline__dot erp-timeline__dot--current"></span>
+              <div class="erp-timeline__who">Sent to customer</div><div class="erp-timeline__meta">06 Jun, 11:45 · r.iyer@tp.com</div>
+              <div class="erp-timeline__note">PDF emailed with attachment</div></li>
+          </ul>
+        </div></div>
+        <div class="erp-panel"><div class="erp-panel__head">Revisions (Version Control)</div><div class="erp-panel__body">
+          <ul class="erp-timeline">
+            <li class="erp-timeline__item"><span class="erp-timeline__dot erp-timeline__dot--current"></span>
+              <div class="erp-timeline__who">Rev B — current</div><div class="erp-timeline__meta">Price revised after negotiation</div></li>
+            <li class="erp-timeline__item"><span class="erp-timeline__dot"></span>
+              <div class="erp-timeline__who">Rev A</div><div class="erp-timeline__meta">Initial issue · snapshot retained</div></li>
+          </ul>
+        </div></div>
+      </aside>
+    </div>
+  </div></main>
+</div>
+<div class="erp-toast-region" id="toasts"></div>
+<script src="quotation-api-client.js"></script>
+<script>
+  function toast(msg,kind){ const r=document.getElementById('toasts');
+    const t=document.createElement('div'); t.className='erp-toast'+(kind?' erp-toast--'+kind:'');
+    t.innerHTML='<div class="erp-toast__body"><div class="erp-toast__title">'+msg+'</div></div>';
+    r.appendChild(t); setTimeout(()=>t.remove(),4000); }
+</script>
+</body>
+</html>

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quotations — Boss Engineers ERP</title>
+<link rel="stylesheet" href="../../design-system/tokens.css">
+<link rel="stylesheet" href="../../design-system/components.css">
+</head>
+<body class="density-compact">
+<div class="erp-shell">
+  <header class="erp-topbar">
+    <div class="erp-topbar__brand"><span class="erp-topbar__logo">BE</span> Boss Engineers ERP</div>
+    <div class="erp-topbar__search"><input type="search" placeholder="Search…  (Ctrl+/)"></div>
+    <div class="erp-topbar__spacer"></div>
+    <div class="erp-topbar__actions"><div class="erp-topbar__user"><span class="erp-avatar">ST</span><span>S. Thakur</span></div></div>
+  </header>
+  <nav class="erp-sidebar">
+    <div class="erp-nav__section">Sales</div>
+    <a class="erp-nav__item" href="enquiry-list.html"><span class="erp-nav__icon">▷</span> Enquiries</a>
+    <a class="erp-nav__item is-active" href="quotation-list.html"><span class="erp-nav__icon">▷</span> Quotations <span class="erp-nav__count" id="navCount">—</span></a>
+    <div class="erp-nav__section">Operations</div>
+    <a class="erp-nav__item"><span class="erp-nav__icon">▣</span> Purchase Orders</a>
+  </nav>
+  <main class="erp-content"><div class="erp-page erp-stack">
+    <div class="erp-breadcrumb"><a>Home</a><span>/</span><a>Sales</a><span>/</span>Quotations</div>
+    <div class="erp-page__head">
+      <div><h1 class="erp-page__title">Quotations</h1><div class="erp-page__subtitle">Mumbai Plant · FY 2026-27</div></div>
+      <div class="erp-row"><a class="erp-btn erp-btn--primary" href="quotation-detail.html">+ New Quotation</a></div>
+    </div>
+    <section class="erp-card">
+      <div class="erp-table-toolbar"><span class="erp-table-toolbar__title">All Quotations <span class="erp-table-toolbar__count" id="count">· loading…</span></span></div>
+      <div class="erp-table-wrap"><table class="erp-table">
+        <thead><tr><th class="col-check"><input type="checkbox"></th>
+          <th>Quotation No</th><th>Rev</th><th>Customer</th>
+          <th class="col-num">Value (₹)</th><th class="col-num">Margin</th><th>Status</th><th>Date</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table></div>
+      <div class="erp-pagination"><span>Rows per page: 25</span><div class="erp-pagination__spacer"></div>
+        <span id="pageinfo">—</span><button class="erp-pagination__btn" disabled>‹</button><button class="erp-pagination__btn">›</button></div>
+    </section>
+  </div></main>
+</div>
+<script src="quotation-api-client.js"></script>
+<script>
+  const SAMPLE = [
+    {quotationId:1,quotationNo:'QTN/MUM/2026-27/000001',currentRevision:1,customerName:'Tata Projects Ltd',totalPrice:9500000,marginPct:15.8,status:'SENT',quoteDate:'2026-06-06'},
+    {quotationId:2,quotationNo:'QTN/MUM/2026-27/000002',currentRevision:0,customerName:'JSW Steel',totalPrice:4200000,marginPct:22.4,status:'PENDING_APPROVAL',quoteDate:'2026-06-05'},
+    {quotationId:3,quotationNo:'QTN/MUM/2026-27/000003',currentRevision:0,customerName:'Adani Ports',totalPrice:1875000,marginPct:11.2,status:'DRAFT',quoteDate:'2026-06-04'},
+    {quotationId:4,quotationNo:'QTN/PUN/2026-27/000001',currentRevision:2,customerName:'Cummins India',totalPrice:6650000,marginPct:18.9,status:'WON',quoteDate:'2026-06-01'},
+    {quotationId:5,quotationNo:'QTN/PUN/2026-27/000002',currentRevision:1,customerName:'Bharat Forge',totalPrice:2310000,marginPct:9.5,status:'REJECTED',quoteDate:'2026-05-29'},
+  ];
+  const BADGE={DRAFT:'draft',PENDING_APPROVAL:'pending',APPROVED:'progress',REJECTED:'rejected',SENT:'progress',NEGOTIATION:'hold',WON:'approved',LOST:'rejected'};
+  const rev=n=>'Rev '+String.fromCharCode(65+(n%26));
+  function render(list){
+    document.getElementById('rows').innerHTML=list.map(q=>`
+      <tr onclick="location.href='quotation-detail.html'">
+        <td class="col-check"><input type="checkbox" onclick="event.stopPropagation()"></td>
+        <td class="mono">${q.quotationNo}</td><td>${rev(q.currentRevision)}</td><td>${q.customerName}</td>
+        <td class="col-num">${Number(q.totalPrice).toLocaleString('en-IN')}</td>
+        <td class="col-num">${Number(q.marginPct).toFixed(1)}%</td>
+        <td><span class="erp-badge erp-badge--${BADGE[q.status]||'draft'}">${q.status.replace('_',' ')}</span></td>
+        <td>${q.quoteDate}</td></tr>`).join('');
+    document.getElementById('count').textContent='· '+list.length+' records';
+    document.getElementById('pageinfo').textContent='1–'+list.length+' of '+list.length;
+    document.getElementById('navCount').textContent=list.length;
+  }
+  (async()=>{ try{ const r=await QuotationApi.list(); render(r.rows||SAMPLE);}catch{ render(SAMPLE);} })();
+</script>
+</body>
+</html>
