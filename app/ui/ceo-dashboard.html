@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CEO Dashboard — Boss Engineers ERP</title>
+<link rel="stylesheet" href="../../design-system/tokens.css">
+<link rel="stylesheet" href="../../design-system/components.css">
+<style>
+  .ceo-grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:var(--sp-4)}
+  .ceo-two{display:grid;grid-template-columns:1fr 420px;gap:var(--sp-4);align-items:start}
+  .ceo-domains{display:grid;grid-template-columns:repeat(5,1fr);gap:var(--sp-4)}
+  .stat{display:flex;flex-direction:column;gap:2px;padding:var(--sp-2) 0}
+  .stat__v{font-size:var(--fs-18);font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums}
+  .stat__l{font-size:var(--fs-11);color:var(--c-text-muted)}
+  .rag{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+  .rag__cell{border-radius:var(--r-sm);padding:8px;color:#fff;font-size:var(--fs-11);cursor:pointer}
+  .rag__cell .no{font-weight:var(--fw-semibold)} .rag__cell .m{opacity:.9}
+  .rag--G{background:#167d3f}.rag--A{background:#b15c00}.rag--R{background:#c0322b}
+  .leg{display:inline-flex;gap:6px;align-items:center;font-size:var(--fs-11);color:var(--c-text-muted)}
+  .dot{width:9px;height:9px;border-radius:2px;display:inline-block}
+</style>
+</head>
+<body class="density-compact">
+<div class="erp-shell">
+  <header class="erp-topbar">
+    <div class="erp-topbar__brand"><span class="erp-topbar__logo">BE</span> Boss Engineers ERP</div>
+    <div class="erp-topbar__spacer"></div>
+    <div class="erp-topbar__actions">
+      <button class="erp-topbar__icon" title="Notifications">🔔<span class="erp-topbar__badge">5</span></button>
+      <div class="erp-topbar__user"><span class="erp-avatar">ST</span><span>S. Thakur · CEO</span></div></div>
+  </header>
+  <nav class="erp-sidebar">
+    <div class="erp-nav__section">Analytics</div>
+    <a class="erp-nav__item is-active"><span class="erp-nav__icon">▦</span> CEO Dashboard</a>
+    <a class="erp-nav__item"><span class="erp-nav__icon">▷</span> Reports</a>
+    <div class="erp-nav__section">Sales</div>
+    <a class="erp-nav__item" href="enquiry-list.html"><span class="erp-nav__icon">▷</span> Enquiries</a>
+    <a class="erp-nav__item" href="quotation-list.html"><span class="erp-nav__icon">▷</span> Quotations</a>
+  </nav>
+  <main class="erp-content"><div class="erp-page erp-stack">
+    <div class="erp-page__head">
+      <div><h1 class="erp-page__title">Executive Dashboard</h1>
+        <div class="erp-page__subtitle">All Branches · FY 2026-27 · ₹ · data as of 11:45</div></div>
+      <div class="erp-row">
+        <span class="leg"><span class="dot rag--G"></span>On track</span>
+        <span class="leg"><span class="dot rag--A"></span>Watch</span>
+        <span class="leg"><span class="dot rag--R"></span>At risk</span>
+        <select class="erp-select" style="width:130px"><option>FY 2026-27</option><option>FY 2025-26</option></select>
+      </div>
+    </div>
+
+    <!-- HEADLINE KPIs -->
+    <div class="ceo-grid5">
+      <div class="erp-kpi erp-kpi--accent"><div class="erp-kpi__label">Order Book</div>
+        <div class="erp-kpi__value num">₹128.4 Cr</div><div class="erp-kpi__delta erp-kpi__delta--up">▲ 8.1% vs LY</div></div>
+      <div class="erp-kpi"><div class="erp-kpi__label">Revenue (YTD)</div>
+        <div class="erp-kpi__value num">₹54.2 Cr</div><div class="erp-kpi__delta erp-kpi__delta--up">▲ 6.4%</div></div>
+      <div class="erp-kpi"><div class="erp-kpi__label">Portfolio Gross Margin</div>
+        <div class="erp-kpi__value num">18.7%</div><div class="erp-kpi__delta erp-kpi__delta--down">▼ 1.3 pts vs quoted</div></div>
+      <div class="erp-kpi"><div class="erp-kpi__label">On-Time Delivery</div>
+        <div class="erp-kpi__value num">89%</div><div class="erp-kpi__delta erp-kpi__delta--down">▼ target 90%</div></div>
+      <div class="erp-kpi"><div class="erp-kpi__label">Projects at Risk</div>
+        <div class="erp-kpi__value num" style="color:var(--c-error)">4</div><div class="erp-kpi__delta text-muted">of 23 active</div></div>
+    </div>
+
+    <!-- PROJECTS (RAG heatmap)  +  DELAYS (at-risk list) -->
+    <div class="ceo-two">
+      <div class="erp-panel"><div class="erp-panel__head">Project Health · 23 active
+        <span class="text-muted" style="font-weight:400;font-size:var(--fs-12)">G 16 · A 3 · R 4</span></div>
+        <div class="erp-panel__body"><div class="rag">
+          <div class="rag__cell rag--G"><div class="no">PRJ…00012</div><div class="m">Tata · 22% · SPI 1.02</div></div>
+          <div class="rag__cell rag--G"><div class="no">PRJ…00009</div><div class="m">JSW · 19% · SPI 0.99</div></div>
+          <div class="rag__cell rag--R"><div class="no">PRJ…00011</div><div class="m">Adani · 9% · SPI 0.82</div></div>
+          <div class="rag__cell rag--A"><div class="no">PRJ…00008</div><div class="m">L&amp;T · 14% · SPI 0.94</div></div>
+          <div class="rag__cell rag--G"><div class="no">PRJ…00007</div><div class="m">Cummins · 21% · SPI 1.05</div></div>
+          <div class="rag__cell rag--R"><div class="no">PRJ…00005</div><div class="m">BFL · 7% · SPI 0.79</div></div>
+          <div class="rag__cell rag--G"><div class="no">PRJ…00014</div><div class="m">SAIL · 24% · SPI 1.10</div></div>
+          <div class="rag__cell rag--A"><div class="no">PRJ…00013</div><div class="m">NTPC · 13% · SPI 0.96</div></div>
+          <div class="rag__cell rag--G"><div class="no">PRJ…00015</div><div class="m">GE · 20% · SPI 1.01</div></div>
+          <div class="rag__cell rag--R"><div class="no">PRJ…00006</div><div class="m">HPCL · 8% · SPI 0.84</div></div>
+        </div></div></div>
+
+      <div class="erp-panel"><div class="erp-panel__head">Delays / At-Risk</div>
+        <div class="erp-table-wrap"><table class="erp-table">
+          <thead><tr><th>Project</th><th>Committed</th><th class="col-num">Slip</th><th>Risk</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">PRJ…00011</td><td>25 Jun</td><td class="col-num">+12d</td><td><span class="erp-badge erp-badge--rejected">HIGH</span></td></tr>
+            <tr><td class="mono">PRJ…00005</td><td>30 Jun</td><td class="col-num">+9d</td><td><span class="erp-badge erp-badge--rejected">HIGH</span></td></tr>
+            <tr><td class="mono">PRJ…00006</td><td>08 Jul</td><td class="col-num">+5d</td><td><span class="erp-badge erp-badge--hold">MED</span></td></tr>
+            <tr><td class="mono">PRJ…00008</td><td>18 Jul</td><td class="col-num">+2d</td><td><span class="erp-badge erp-badge--hold">MED</span></td></tr>
+          </tbody></table></div>
+        <div class="erp-panel__body"><div class="stat"><span class="stat__l">LD Exposure (delayed projects)</span>
+          <span class="stat__v" style="color:var(--c-error)">₹ 62.0 L</span></div></div></div>
+    </div>
+
+    <!-- DOMAIN KPIs: Procurement · Production · FAT · Installation · Service -->
+    <div class="ceo-domains">
+      <div class="erp-panel"><div class="erp-panel__head">Procurement</div><div class="erp-panel__body">
+        <div class="stat"><span class="stat__v num">₹18.9 Cr</span><span class="stat__l">Open PO value</span></div>
+        <div class="stat"><span class="stat__v num">₹14.2 Cr</span><span class="stat__l">Committed cost</span></div>
+        <div class="stat"><span class="stat__v num">91%</span><span class="stat__l">On-time vendor delivery</span></div>
+        <div class="stat"><span class="stat__v num" style="color:var(--c-error)">6</span><span class="stat__l">Critical-item alerts</span></div>
+      </div></div>
+      <div class="erp-panel"><div class="erp-panel__head">Production</div><div class="erp-panel__body">
+        <div class="stat"><span class="stat__v num">87%</span><span class="stat__l">Schedule adherence</span></div>
+        <div class="stat"><span class="stat__v num">3.2%</span><span class="stat__l">Scrap / rework</span></div>
+        <div class="stat"><span class="stat__v num">₹9.4 Cr</span><span class="stat__l">WIP value</span></div>
+      </div></div>
+      <div class="erp-panel"><div class="erp-panel__head">FAT</div><div class="erp-panel__body">
+        <div class="stat"><span class="stat__v num">84%</span><span class="stat__l">First-pass yield</span></div>
+        <div class="stat"><span class="stat__v num" style="color:var(--c-warning)">11</span><span class="stat__l">Open punch items</span></div>
+      </div></div>
+      <div class="erp-panel"><div class="erp-panel__head">Installation</div><div class="erp-panel__body">
+        <div class="stat"><span class="stat__v num">5</span><span class="stat__l">In progress</span></div>
+        <div class="stat"><span class="stat__v num">92%</span><span class="stat__l">SAT first-pass</span></div>
+        <div class="stat"><span class="stat__v num">11d</span><span class="stat__l">Avg install cycle</span></div>
+      </div></div>
+      <div class="erp-panel"><div class="erp-panel__head">Service</div><div class="erp-panel__body">
+        <div class="stat"><span class="stat__v num">18</span><span class="stat__l">Open tickets</span></div>
+        <div class="stat"><span class="stat__v num">94%</span><span class="stat__l">SLA adherence</span></div>
+        <div class="stat"><span class="stat__v num">1.8%</span><span class="stat__l">Warranty cost % of rev</span></div>
+      </div></div>
+    </div>
+    <p class="text-muted" style="font-size:var(--fs-11)">Read-only · sourced from rpt.mv_ceo_portfolio / mv_project_health_heatmap / mv_at_risk_projects (refresh 5–15 min) · every tile drills through to its report.</p>
+  </div></main>
+</div>
+</body>
+</html>
