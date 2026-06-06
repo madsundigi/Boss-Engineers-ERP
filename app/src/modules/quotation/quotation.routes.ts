@@ -5,7 +5,6 @@ import { validate } from '../../common/validate';
 import { requirePermission } from '../../common/rbac';
 import { EnquiryRepository } from '../enquiry/enquiry.repository';
 import { PdfService } from '../../services/pdf.service';
-import { EmailService } from '../../services/email.service';
 import { QuotationRepository } from './quotation.repository';
 import { QuotationService } from './quotation.service';
 import { QuotationController } from './quotation.controller';
@@ -15,9 +14,9 @@ import {
   decisionSchema, reviseSchema, sendSchema, listQuerySchema,
 } from './quotation.dto';
 
-export function quotationRouter(pool: Pool, email: EmailService): Router {
+export function quotationRouter(pool: Pool): Router {
   const service = new QuotationService(
-    new QuotationRepository(pool), new EnquiryRepository(pool), new PdfService(), email);
+    new QuotationRepository(pool), new EnquiryRepository(pool), new PdfService());
   const c = new QuotationController(service);
   const r = Router();
   const P = QUOTE_PERMS;

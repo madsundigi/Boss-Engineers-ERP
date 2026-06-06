@@ -2,7 +2,6 @@ import { QuotationService } from '../src/modules/quotation/quotation.service';
 import { QuotationRepository } from '../src/modules/quotation/quotation.repository';
 import { EnquiryRepository } from '../src/modules/enquiry/enquiry.repository';
 import { PdfService } from '../src/services/pdf.service';
-import { EmailService } from '../src/services/email.service';
 import { RequestContext } from '../src/common/request-context';
 import { Quotation } from '../src/modules/quotation/quotation.types';
 import { AppError } from '../src/common/http-error';
@@ -26,8 +25,7 @@ function deps() {
     updateStatus: jest.fn(), revise: jest.fn(), listRevisions: jest.fn() } as unknown as jest.Mocked<QuotationRepository>;
   const enq = { findById: jest.fn(), changeStatus: jest.fn() } as unknown as jest.Mocked<EnquiryRepository>;
   const pdf = { generateQuotationPdf: jest.fn().mockResolvedValue(Buffer.from('%PDF-')) } as unknown as jest.Mocked<PdfService>;
-  const email = { send: jest.fn().mockResolvedValue({ messageId: 'm1', to: 'a@a.com' }) } as unknown as jest.Mocked<EmailService>;
-  return { repo, enq, pdf, email, svc: new QuotationService(repo, enq, pdf, email) };
+  return { repo, enq, pdf, svc: new QuotationService(repo, enq, pdf) };
 }
 
 describe('QuotationService', () => {
@@ -93,15 +91,18 @@ describe('QuotationService', () => {
       const d = deps(); d.repo.findById.mockResolvedValue(quote({ status: 'APPROVED', email: null }));
       await expect(code(d.svc.send(ctx, 1, { rowVersion: 1 }))).resolves.toBe(400);
     });
-    it('generates PDF, emails it, and marks SENT', async () => {
+    it('marks SENT and emits a quotation.sent outbox event (atomic; no inline email)', async () => {
       const d = deps();
       d.repo.findById.mockResolvedValue(quote({ status: 'APPROVED', email: 'a@a.com' }));
       d.repo.updateStatus.mockResolvedValue(quote({ status: 'SENT' }));
       const out = await d.svc.send(ctx, 1, { rowVersion: 1 });
-      expect(d.pdf.generateQuotationPdf).toHaveBeenCalled();
-      expect(d.email.send).toHaveBeenCalled();
-      expect(out.messageId).toBe('m1');
+      expect(out.queued).toBe(true);
       expect(out.quotation.status).toBe('SENT');
+      // the email is NOT sent inline; instead an event is recorded in the same tx
+      const [, , version, status, , event] = d.repo.updateStatus.mock.calls[0];
+      expect(version).toBe(1);
+      expect(status).toBe('SENT');
+      expect(event).toMatchObject({ eventType: 'quotation.sent', aggregateType: 'QUOTATION', aggregateId: 1 });
     });
   });
 

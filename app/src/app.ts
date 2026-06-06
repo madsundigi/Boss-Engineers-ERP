@@ -6,7 +6,11 @@ import { httpLogger } from './common/logger';
 import { errorMiddleware } from './common/error-middleware';
 import { enquiryRouter } from './modules/enquiry/enquiry.routes';
 import { quotationRouter } from './modules/quotation/quotation.routes';
+import { quotationSentHandler } from './modules/quotation/quotation.handlers';
 import { EmailService, EmailTransport, buildEmailTransport } from './services/email.service';
+import { PdfService } from './services/pdf.service';
+import { OutboxRelay } from './outbox/relay';
+import { OutboxHandler } from './outbox/outbox';
 
 export interface AppDeps {
   /** Inject an email transport (e.g. OutboxTransport in tests). Defaults to SMTP-or-outbox by env. */
@@ -29,9 +33,16 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
   const auth = new AuthService(pool);
   app.use('/api', authenticate(auth));
 
-  const email = new EmailService(deps.emailTransport ?? buildEmailTransport());
   app.use('/api/enquiries', enquiryRouter(pool));
-  app.use('/api/quotations', quotationRouter(pool, email));
+  app.use('/api/quotations', quotationRouter(pool));
+
+  // Transactional outbox relay: dispatches committed domain events (e.g. emails
+  // the quotation PDF on 'quotation.sent'). Exposed for the server poller and tests.
+  const email = new EmailService(deps.emailTransport ?? buildEmailTransport());
+  const handlers = new Map<string, OutboxHandler>([
+    ['quotation.sent', quotationSentHandler(pool, new PdfService(), email)],
+  ]);
+  app.locals.outboxRelay = new OutboxRelay(pool, handlers);
 
   app.use(errorMiddleware);
   return app;

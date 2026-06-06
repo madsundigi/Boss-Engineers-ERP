@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import { Express } from 'express';
 import { createApp } from '../src/app';
 import { OutboxTransport } from '../src/services/email.service';
+import { OutboxRelay } from '../src/outbox/relay';
 
 const RUN = !!process.env.DATABASE_URL;
 const d = RUN ? describe : describe.skip;
@@ -100,16 +101,20 @@ d('Quotation API (integration) — versioning, approval, PDF, email, enquiry syn
     expect(self.status).toBe(403);
   });
 
-  it('sends the quotation — generates a PDF and emails it (outbox)', async () => {
+  it('sends the quotation — marks SENT, queues delivery, relay emails the PDF (transactional outbox)', async () => {
     const res = await request(app).post(`/api/quotations/${quoteId}/send`).set(hdr(sales)).send({ rowVersion: v });
     expect(res.status).toBe(200);
     expect(res.body.quotation.status).toBe('SENT');
-    expect(res.body.messageId).toBeTruthy();
-    expect(outbox.outbox.length).toBeGreaterThanOrEqual(1);
+    expect(res.body.queued).toBe(true);
+    v = res.body.quotation.rowVersion;
+
+    // email has NOT been sent yet — it's queued in the outbox, dispatched after commit.
+    const before = outbox.outbox.length;
+    await (app.locals.outboxRelay as OutboxRelay).drain();
+    expect(outbox.outbox.length).toBe(before + 1);
     const msg = outbox.outbox[outbox.outbox.length - 1];
     expect(msg.attachments?.[0].filename).toMatch(/\.pdf$/);
     expect(msg.attachments?.[0].content.subarray(0, 5).toString('latin1')).toBe('%PDF-');
-    v = res.body.quotation.rowVersion;
   });
 
   it('serves the PDF document', async () => {

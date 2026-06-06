@@ -2,7 +2,6 @@ import { Errors } from '../../common/http-error';
 import { RequestContext } from '../../common/request-context';
 import { EnquiryRepository } from '../enquiry/enquiry.repository';
 import { PdfService, QuotationPdfModel } from '../../services/pdf.service';
-import { EmailService } from '../../services/email.service';
 import { QuotationRepository, QuotationHeaderInput } from './quotation.repository';
 import { Quotation, QuotationLine } from './quotation.types';
 import {
@@ -15,14 +14,24 @@ import Decimal from 'decimal.js';
 const applyDiscount = (gross: Decimal, discountPct: number): number =>
   gross.mul(new Decimal(1).minus(new Decimal(discountPct).div(100))).toDecimalPlaces(2).toNumber();
 
-export interface SendResult { quotation: Quotation; messageId: string; to: string; }
+/** Map a quotation to the PDF render model (shared by the API and the outbox handler). */
+export function buildQuotationPdfModel(q: Quotation): QuotationPdfModel {
+  return {
+    quotationNo: q.quotationNo, revisionLabel: revisionLabel(q.currentRevision), subject: q.subject,
+    customerName: q.customerName, contact: q.contact, email: q.email, quoteDate: q.quoteDate,
+    validUntil: q.validUntil, currencyCode: q.currencyCode, lines: q.lines,
+    totalCost: q.totalCost, totalPrice: q.totalPrice, discountPct: q.discountPct, marginPct: q.marginPct,
+  };
+}
+
+/** send() now queues delivery via the outbox; email is dispatched by the relay after commit. */
+export interface SendResult { quotation: Quotation; queued: boolean; to: string; }
 
 export class QuotationService {
   constructor(
     private readonly repo: QuotationRepository,
     private readonly enquiries: EnquiryRepository,
     private readonly pdf: PdfService,
-    private readonly email: EmailService,
   ) {}
 
   private price(lines: { description: string; qty: number; unitPrice: number; isOptional?: boolean }[]) {
@@ -140,20 +149,17 @@ export class QuotationService {
     return q;
   }
 
-  private toPdfModel(q: Quotation): QuotationPdfModel {
-    return {
-      quotationNo: q.quotationNo, revisionLabel: revisionLabel(q.currentRevision), subject: q.subject,
-      customerName: q.customerName, contact: q.contact, email: q.email, quoteDate: q.quoteDate,
-      validUntil: q.validUntil, currencyCode: q.currencyCode, lines: q.lines,
-      totalCost: q.totalCost, totalPrice: q.totalPrice, discountPct: q.discountPct, marginPct: q.marginPct,
-    };
-  }
-
   async generatePdf(ctx: RequestContext, id: number): Promise<{ quotation: Quotation; pdf: Buffer }> {
     const q = await this.getById(ctx, id);
-    return { quotation: q, pdf: await this.pdf.generateQuotationPdf(this.toPdfModel(q)) };
+    return { quotation: q, pdf: await this.pdf.generateQuotationPdf(buildQuotationPdfModel(q)) };
   }
 
+  /**
+   * Transition to SENT and queue delivery via the transactional outbox: the
+   * status change and the 'quotation.sent' event commit atomically (one tx).
+   * The relay then renders the PDF and emails it AFTER commit (fixes BW-02:
+   * no email is sent for a state change that didn't persist; retries on failure).
+   */
   async send(ctx: RequestContext, id: number, dto: SendDto): Promise<SendResult> {
     const existing = await this.getById(ctx, id);
     const sendable: QuoteStatus[] = ['APPROVED', 'SENT', 'NEGOTIATION'];
@@ -162,18 +168,18 @@ export class QuotationService {
     }
     const to = dto.to ?? existing.email;
     if (!to) throw Errors.badRequest('No recipient email (provide "to" or set the quotation email)');
-    const pdf = await this.pdf.generateQuotationPdf(this.toPdfModel(existing));
     const pdfRef = `quotations/${existing.quotationNo}-rev${existing.currentRevision}.pdf`;
-    const sent = await this.email.send({
-      to, cc: dto.cc,
-      subject: `Quotation ${existing.quotationNo} from Boss Engineers`,
-      text: dto.message ?? `Dear ${existing.contact ?? existing.customerName},\n\nPlease find attached our quotation ${existing.quotationNo}.\n\nRegards,\nBoss Engineers`,
-      attachments: [{ filename: `${existing.quotationNo}.pdf`, content: pdf, contentType: 'application/pdf' }],
-    });
-    // TODO(outbox): make email + state change atomic via transactional outbox (QA BW-02/CC-01)
-    const q = await this.repo.updateStatus(ctx, id, dto.rowVersion, 'SENT', { sent_at: new Date(), sent_to: to, pdf_ref: pdfRef });
+    const q = await this.repo.updateStatus(
+      ctx, id, dto.rowVersion, 'SENT',
+      { sent_at: new Date(), sent_to: to, pdf_ref: pdfRef },
+      {
+        eventType: 'quotation.sent', aggregateType: 'QUOTATION', aggregateId: id,
+        companyId: ctx.companyId, createdBy: ctx.userId,
+        payload: { to, cc: dto.cc ?? null, message: dto.message ?? null },
+      },
+    );
     if (!q) throw Errors.conflict('Row version mismatch');
-    return { quotation: q, messageId: sent.messageId, to };
+    return { quotation: q, queued: true, to };
   }
 
   async markWon(ctx: RequestContext, id: number, rowVersion: number): Promise<Quotation> {

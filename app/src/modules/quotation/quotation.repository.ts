@@ -1,5 +1,6 @@
 import { Pool, QueryResultRow } from 'pg';
 import { runInContext, Queryable } from '../../db/pool';
+import { emitOutbox, OutboxEventInput } from '../../outbox/outbox';
 import { RequestContext } from '../../common/request-context';
 import { Quotation, QuotationLine, QuotationRevision, QuotationListResult } from './quotation.types';
 import { ListQueryDto } from './quotation.dto';
@@ -139,7 +140,8 @@ export class QuotationRepository {
   }
 
   async updateStatus(
-    ctx: RequestContext, id: number, version: number | null, status: QuoteStatus, patch: StatusPatch = {},
+    ctx: RequestContext, id: number, version: number | null, status: QuoteStatus,
+    patch: StatusPatch = {}, event?: OutboxEventInput,
   ): Promise<Quotation | null> {
     const set: string[] = [`status = $1`]; const params: unknown[] = [status];
     for (const [col, val] of Object.entries(patch)) { params.push(val); set.push(`${col} = $${params.length}`); }
@@ -154,6 +156,8 @@ export class QuotationRepository {
           WHERE quotation_id=$${pId} AND company_id=$${pCo} AND NOT is_deleted${verClause}
         RETURNING ${H}`, params);
       if (!res.rowCount) return null;
+      // Atomic with the state change: record the domain event (transactional outbox).
+      if (event) await emitOutbox(c, event);
       return { ...mapHeader(res.rows[0]), lines: await this.fetchLines(c, id) };
     });
   }
