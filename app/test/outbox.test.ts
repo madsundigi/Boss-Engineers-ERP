@@ -46,9 +46,11 @@ d('OutboxRelay (transactional outbox)', () => {
     expect(s.attempts).toBe(1);
   });
 
-  it('skips (PROCESSED) an event with no registered handler', async () => {
-    const id = await insertEvent('test.unhandled');
+  it('never silently drops an event with no registered handler (dead-letters it instead)', async () => {
+    const id = await insertEvent('test.unhandled', 1); // max_attempts=1 -> DEAD on first miss
     await new OutboxRelay(pool, new Map()).drain();
-    expect((await statusOf(id)).status).toBe('PROCESSED');
+    const s = await statusOf(id);
+    expect(s.status).toBe('DEAD'); // visible/alertable, not silently PROCESSED
+    expect(s.attempts).toBe(1);
   });
 });

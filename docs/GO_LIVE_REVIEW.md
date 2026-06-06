@@ -10,9 +10,9 @@
 | Mandate | Identify issues only (no feature work); produce a GO-LIVE checklist; **do not approve launch unless every critical (S1) issue is resolved** |
 
 ## ⛔ DECISION: **LAUNCH NOT APPROVED**
-**14 S1 (critical) and 18 S2 (high) issues remain open.** The system is an early, well-engineered **2-of-16-module slice** with strong data/audit foundations, but it is **not functionally complete and not legally operable (no GST/e-invoice)**. No role signs off.
+**13 S1 (critical) and 17 S2 (high) issues remain open.** The system is an early, well-engineered **2-of-16-module slice** with strong data/audit foundations, but it is **not functionally complete and not legally operable (no GST/e-invoice)**. No role signs off.
 
-> **Post-review remediation (2026-06-06 · 73 tests green):** ✅ **BUG-01** — the app now runs as the non-superuser **`erp_app`** role (`SET LOCAL ROLE` on reads + writes) so **RLS is actually enforced** — proven by an unfiltered-query isolation test (0 rows for the wrong company, >0 for the right); migration 005 adds the child-table DELETE grants. ✅ **BUG-02** — authentication is **fail-closed** (a verified JWT is required when configured; header identity is rejected in production). **PRM-01** closes with BUG-01. **Launch remains NOT APPROVED** — the remaining S1 (functional scope, statutory, finance, engineering, migration tooling, backup/DR) still stand.
+> **Post-review remediation (2026-06-06 · 73 tests green):** ✅ **BUG-01** — the app now runs as the non-superuser **`erp_app`** role (`SET LOCAL ROLE` on reads + writes) so **RLS is actually enforced** — proven by an unfiltered-query isolation test (0 rows for the wrong company, >0 for the right); migration 005 adds the child-table DELETE grants. ✅ **BUG-02** — authentication is **fail-closed** (verified JWT required when configured; header identity rejected in production). **PRM-01** closes with BUG-01. ✅ **DAT-01** — a tracked, idempotent **migration runner** (`npm run migrate` + `public.schema_migration` with sha256 checksum-drift detection). ✅ **BUG-03** — the outbox no longer silently drops unhandled events (they retry → dead-letter). **Launch remains NOT APPROVED** — the remaining S1 (functional scope, statutory, finance, engineering, backup/DR) still stand.
 
 Severity: 🔴 S1 critical (blocker) · 🟠 S2 high · 🟡 S3 medium · ⚪ S4 low. Status: **OPEN** · **PARTIAL** · ✅ FIXED (this engagement).
 
@@ -23,7 +23,7 @@ Severity: 🔴 S1 critical (blocker) · 🟠 S2 high · 🟡 S3 medium · ⚪ S4
 |---|---|---|---|---|
 | BUG-01 | 🔴 | ✅ FIXED | **RLS was bypassed at runtime** — app connected as superuser. **Fixed:** every read/write now `SET LOCAL ROLE erp_app` + tenant GUC; RLS enforced (isolation test; mig 005 grants). | Tenant isolation now enforced at the DB. |
 | BUG-02 | 🔴 | ✅ FIXED | **Auth failed open.** **Fixed:** a verified JWT is required when `AUTH_JWT_SECRET` is set (no header fallback), and header identity is rejected when `NODE_ENV=production`. | No silent auth bypass. |
-| BUG-03 | 🟠 | OPEN | **Outbox silently drops unknown events** — `relay.ts` marks events with no registered handler as PROCESSED. | When `quotation.won`/etc. are emitted before a handler exists, the event is **lost** (no fan-out, no error). |
+| BUG-03 | 🟠 | ✅ FIXED | **Was:** unknown events silently PROCESSED. **Fixed:** an event with no handler now fails → retry/backoff → DEAD (visible/alertable), never dropped. | No silent event loss. |
 | BUG-04 | 🟠 | OPEN | **Dead-lettered outbox events unmonitored** — a permanently failing email → quote is SENT but never delivered; no alert. | Silent non-delivery of customer documents. |
 | BUG-05 | 🟠 | OPEN | **Cross-module sync non-atomic** — convert/won/lost update the enquiry in a separate best-effort tx; a `null` (version mismatch) is ignored. | Quote won but enquiry not CONVERTED → inconsistent lifecycle. |
 | BUG-06 | 🟡 | OPEN | **Lost-reason not persisted** — enquiry LOST requires a reason (service) but stores `null`. | Lost-reason intelligence discarded. |
@@ -86,7 +86,7 @@ Severity: 🔴 S1 critical (blocker) · 🟠 S2 high · 🟡 S3 medium · ⚪ S4
 ## 8. Data Integrity Issues
 | ID | Sev | Status | Finding | Impact |
 |---|---|---|---|---|
-| DAT-01 | 🔴 | OPEN | **No migration runner / version table** — migrations applied manually via `psql -f`; no record of what's applied, no ordering/rollback guard. | Schema drift; unrepeatable environments; risky deploys. |
+| DAT-01 | 🔴 | ✅ FIXED | **Fixed:** `npm run migrate` (`scripts/migrate.ts`) applies pending `app/migrations/*.sql` in order, records each in `public.schema_migration` (sha256), is idempotent, and refuses on checksum drift. | Repeatable, tracked deploys. |
 | DAT-02 | 🔴 | OPEN | **No backup / PITR / DR / tested restore.** | Catastrophic, unrecoverable data loss. |
 | DAT-03 | 🟠 | OPEN | Cross-module sync non-atomic (BUG-05). | Inconsistent enquiry/quote states. |
 | DAT-04 | 🟠 | OPEN | No idempotency (LOG-02). | Duplicate documents. |
@@ -108,7 +108,7 @@ Severity: 🔴 S1 critical (blocker) · 🟠 S2 high · 🟡 S3 medium · ⚪ S4
 | 8 | App security (XSS, deps, headers, rate-limit) | ◑ PARTIAL | controls added (SEC-05); rate-limit store per-instance |
 | 9 | Performance load-tested to NFR (dashboard <3s, posting <1s) | ❌ FAIL | not tested; quick wins unapplied (PERF) |
 | 10 | Caching + PgBouncer + scaling for target users | ❌ FAIL | not implemented |
-| 11 | Data integrity: migration tooling + idempotency + atomic sync | ❌ FAIL | DAT-01/03/04 |
+| 11 | Data integrity: migration tooling + idempotency + atomic sync | ◑ PARTIAL | migration runner ✅ (DAT-01); idempotency (DAT-04) + atomic sync (DAT-03) open |
 | 12 | Backup + PITR + **tested restore** + DR plan | ❌ FAIL | DAT-02 |
 | 13 | Monitoring + alerting + SLOs + on-call | ❌ FAIL | none (structured logging only) |
 | 14 | Audit: append-only tamper-evident + **semantic events** | ◑ PARTIAL | DB layer ✅; app semantic events missing (DAT-05) |
@@ -117,7 +117,7 @@ Severity: 🔴 S1 critical (blocker) · 🟠 S2 high · 🟡 S3 medium · ⚪ S4
 | 17 | UAT sign-off per module | ❌ FAIL | not performed |
 | 18 | Documentation | ✅ PASS | extensive and current |
 
-**Score: 2 PASS · 4 PARTIAL · 12 FAIL** (was 1/3/14 — gate 6 now PASS, gate 5 PARTIAL after the BUG-01/BUG-02 fixes).
+**Score: 2 PASS · 5 PARTIAL · 11 FAIL** (was 1/3/14 — gates 6 PASS, 5 & 11 PARTIAL after the BUG-01/BUG-02/DAT-01/BUG-03 fixes).
 
 ## Board Sign-offs
 | Role | Verdict | Top reason |

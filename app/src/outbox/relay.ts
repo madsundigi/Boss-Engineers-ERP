@@ -7,7 +7,8 @@ import { OutboxHandler, OutboxRecord } from './outbox';
  * multiple relay instances don't double-process), processed inside that
  * transaction, then marked PROCESSED. On handler failure the attempt count is
  * incremented with exponential backoff; after max_attempts the event is
- * dead-lettered (status DEAD). Unknown event types are skipped (PROCESSED).
+ * dead-lettered (status DEAD). An event with no registered handler is treated as
+ * a failure (retry → dead-letter) — it is NEVER silently dropped (BUG-03).
  */
 export class OutboxRelay {
   private timer?: NodeJS.Timeout;
@@ -44,7 +45,8 @@ export class OutboxRelay {
 
       try {
         const handler = this.handlers.get(rec.eventType);
-        if (handler) await handler(rec); // unknown type -> skip (mark processed)
+        if (!handler) throw new Error(`No handler registered for outbox event type '${rec.eventType}'`);
+        await handler(rec);
         await client.query(
           `UPDATE mdm.outbox_event SET status='PROCESSED', processed_at=now() WHERE event_id=$1`,
           [rec.eventId]);
