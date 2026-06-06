@@ -29,10 +29,13 @@ export class AuthService {
     companyId: number;
     buId: number | null;
   } {
-    const authHeader = req.header('authorization');
-    const bearer = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1];
+    const bearer = req.header('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
+    const secret = process.env.AUTH_JWT_SECRET;
 
-    if (bearer && process.env.AUTH_JWT_SECRET) {
+    // When a JWT secret is configured, a verified token is REQUIRED — never fall
+    // back to spoofable identity headers (closes the fail-open hole, BUG-02).
+    if (secret) {
+      if (!bearer) throw Errors.unauthorized('Bearer token required');
       const claims = verifyAccessToken(bearer);
       if (!claims) throw Errors.unauthorized('Invalid or expired token');
       return {
@@ -40,6 +43,12 @@ export class AuthService {
         companyId: claims.companyId,
         buId: claims.buId ?? null,
       };
+    }
+
+    // No secret configured: FAIL CLOSED in production — the x-user-id header
+    // fallback exists only for local dev/test, never for a real deployment.
+    if (process.env.NODE_ENV === 'production') {
+      throw Errors.unauthorized('Authentication is not configured (AUTH_JWT_SECRET required in production)');
     }
 
     const userId = Number(req.header('x-user-id'));

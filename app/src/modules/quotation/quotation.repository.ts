@@ -1,5 +1,5 @@
 import { Pool, QueryResultRow } from 'pg';
-import { runInContext, Queryable } from '../../db/pool';
+import { runInContext, runRead, Queryable } from '../../db/pool';
 import { emitOutbox, OutboxEventInput } from '../../outbox/outbox';
 import { RequestContext } from '../../common/request-context';
 import { Quotation, QuotationLine, QuotationRevision, QuotationListResult } from './quotation.types';
@@ -84,11 +84,13 @@ export class QuotationRepository {
   }
 
   async findById(ctx: RequestContext, id: number): Promise<Quotation | null> {
-    const res = await this.pool.query(
-      `SELECT ${H} FROM sales.quotation WHERE quotation_id=$1 AND company_id=$2 AND NOT is_deleted`,
-      [id, ctx.companyId]);
-    if (!res.rowCount) return null;
-    return { ...mapHeader(res.rows[0]), lines: await this.fetchLines(this.pool, id) };
+    return runRead(this.pool, ctx, async (c) => {
+      const res = await c.query(
+        `SELECT ${H} FROM sales.quotation WHERE quotation_id=$1 AND company_id=$2 AND NOT is_deleted`,
+        [id, ctx.companyId]);
+      if (!res.rowCount) return null;
+      return { ...mapHeader(res.rows[0]), lines: await this.fetchLines(c, id) };
+    });
   }
 
   async list(ctx: RequestContext, q: ListQueryDto): Promise<QuotationListResult> {
@@ -97,10 +99,12 @@ export class QuotationRepository {
     if (q.status) { params.push(q.status); where.push(`status = $${params.length}`); }
     if (q.q) { params.push(`%${q.q}%`); const i = params.length; where.push(`(customer_name ILIKE $${i} OR quotation_no ILIKE $${i})`); }
     const w = where.join(' AND ');
-    const total = Number((await this.pool.query<{ c: string }>(`SELECT count(*)::text c FROM sales.quotation WHERE ${w}`, params)).rows[0].c);
     const offset = (q.page - 1) * q.pageSize;
-    const rows = await this.pool.query(`SELECT ${H} FROM sales.quotation WHERE ${w} ORDER BY ${q.sort} ${q.dir.toUpperCase()} LIMIT ${q.pageSize} OFFSET ${offset}`, params);
-    return { rows: rows.rows.map(mapHeader), total, page: q.page, pageSize: q.pageSize };
+    return runRead(this.pool, ctx, async (c) => {
+      const total = Number((await c.query<{ c: string }>(`SELECT count(*)::text c FROM sales.quotation WHERE ${w}`, params)).rows[0].c);
+      const rows = await c.query(`SELECT ${H} FROM sales.quotation WHERE ${w} ORDER BY ${q.sort} ${q.dir.toUpperCase()} LIMIT ${q.pageSize} OFFSET ${offset}`, params);
+      return { rows: rows.rows.map(mapHeader), total, page: q.page, pageSize: q.pageSize };
+    });
   }
 
   async update(
@@ -185,14 +189,16 @@ export class QuotationRepository {
   }
 
   async listRevisions(ctx: RequestContext, id: number): Promise<QuotationRevision[]> {
-    const res = await this.pool.query(
-      `SELECT r.revision_id, r.rev_no, r.reason, r.snapshot, r.created_at
-         FROM sales.quotation_revision r JOIN sales.quotation q ON q.quotation_id=r.quotation_id
-        WHERE r.quotation_id=$1 AND q.company_id=$2 ORDER BY r.rev_no DESC`,
-      [id, ctx.companyId]);
-    return res.rows.map((r) => ({
-      revisionId: Number(r.revision_id), revNo: Number(r.rev_no), reason: r.reason,
-      snapshot: r.snapshot, createdAt: r.created_at,
-    }));
+    return runRead(this.pool, ctx, async (c) => {
+      const res = await c.query(
+        `SELECT r.revision_id, r.rev_no, r.reason, r.snapshot, r.created_at
+           FROM sales.quotation_revision r JOIN sales.quotation q ON q.quotation_id=r.quotation_id
+          WHERE r.quotation_id=$1 AND q.company_id=$2 ORDER BY r.rev_no DESC`,
+        [id, ctx.companyId]);
+      return res.rows.map((r) => ({
+        revisionId: Number(r.revision_id), revNo: Number(r.rev_no), reason: r.reason,
+        snapshot: r.snapshot, createdAt: r.created_at,
+      }));
+    });
   }
 }

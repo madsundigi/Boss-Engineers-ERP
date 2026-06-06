@@ -10,7 +10,9 @@
 | Mandate | Identify issues only (no feature work); produce a GO-LIVE checklist; **do not approve launch unless every critical (S1) issue is resolved** |
 
 ## ⛔ DECISION: **LAUNCH NOT APPROVED**
-**16 S1 (critical) and 18 S2 (high) issues are open.** The system is an early, well-engineered **2-of-16-module slice** with strong data/audit foundations, but it is **not functionally complete, not legally operable (no GST/e-invoice), and two critical security controls are inert in practice** (RLS bypass, auth fail-open). No role signs off.
+**14 S1 (critical) and 18 S2 (high) issues remain open.** The system is an early, well-engineered **2-of-16-module slice** with strong data/audit foundations, but it is **not functionally complete and not legally operable (no GST/e-invoice)**. No role signs off.
+
+> **Post-review remediation (2026-06-06 · 73 tests green):** ✅ **BUG-01** — the app now runs as the non-superuser **`erp_app`** role (`SET LOCAL ROLE` on reads + writes) so **RLS is actually enforced** — proven by an unfiltered-query isolation test (0 rows for the wrong company, >0 for the right); migration 005 adds the child-table DELETE grants. ✅ **BUG-02** — authentication is **fail-closed** (a verified JWT is required when configured; header identity is rejected in production). **PRM-01** closes with BUG-01. **Launch remains NOT APPROVED** — the remaining S1 (functional scope, statutory, finance, engineering, migration tooling, backup/DR) still stand.
 
 Severity: 🔴 S1 critical (blocker) · 🟠 S2 high · 🟡 S3 medium · ⚪ S4 low. Status: **OPEN** · **PARTIAL** · ✅ FIXED (this engagement).
 
@@ -19,8 +21,8 @@ Severity: 🔴 S1 critical (blocker) · 🟠 S2 high · 🟡 S3 medium · ⚪ S4
 ## 1. Bugs
 | ID | Sev | Status | Finding · Evidence | Impact |
 |---|---|---|---|---|
-| BUG-01 | 🔴 | OPEN | **RLS bypassed at runtime** — app connects as superuser `postgres` (`config/env.ts` default `postgres://postgres@…`; app never `SET ROLE erp_app`). RLS policies (mig 003) apply only to non-superusers. | Tenant data isolation is **not enforced** in practice — the headline AuthZ control is inert. |
-| BUG-02 | 🔴 | OPEN | **Auth fails open** — `auth.ts` verifies JWT only when `AUTH_JWT_SECRET` is set; otherwise trusts `x-user-id/-company-id` headers. | A prod deploy that forgets the secret = **full authentication bypass / tenant impersonation**. |
+| BUG-01 | 🔴 | ✅ FIXED | **RLS was bypassed at runtime** — app connected as superuser. **Fixed:** every read/write now `SET LOCAL ROLE erp_app` + tenant GUC; RLS enforced (isolation test; mig 005 grants). | Tenant isolation now enforced at the DB. |
+| BUG-02 | 🔴 | ✅ FIXED | **Auth failed open.** **Fixed:** a verified JWT is required when `AUTH_JWT_SECRET` is set (no header fallback), and header identity is rejected when `NODE_ENV=production`. | No silent auth bypass. |
 | BUG-03 | 🟠 | OPEN | **Outbox silently drops unknown events** — `relay.ts` marks events with no registered handler as PROCESSED. | When `quotation.won`/etc. are emitted before a handler exists, the event is **lost** (no fan-out, no error). |
 | BUG-04 | 🟠 | OPEN | **Dead-lettered outbox events unmonitored** — a permanently failing email → quote is SENT but never delivered; no alert. | Silent non-delivery of customer documents. |
 | BUG-05 | 🟠 | OPEN | **Cross-module sync non-atomic** — convert/won/lost update the enquiry in a separate best-effort tx; a `null` (version mismatch) is ignored. | Quote won but enquiry not CONVERTED → inconsistent lifecycle. |
@@ -58,7 +60,7 @@ Severity: 🔴 S1 critical (blocker) · 🟠 S2 high · 🟡 S3 medium · ⚪ S4
 ## 5. Security Risks  *(detail: SECURITY_AUDIT.md)*
 | ID | Sev | Status | Finding |
 |---|---|---|---|
-| SEC-01 | 🔴 | OPEN | RLS inert (BUG-01) + auth fail-open (BUG-02) — the two critical controls. |
+| SEC-01 | 🔴 | ✅ FIXED | RLS now enforced (BUG-01) + auth fail-closed (BUG-02) — both critical controls resolved & tested. |
 | SEC-02 | 🟠 | OPEN | No MFA; no password policy enforced (no login flow); no token lifecycle (refresh/revocation). |
 | SEC-03 | 🟠 | OPEN | DOA value-band unenforced (LOG-01). |
 | SEC-04 | 🟡 | OPEN | Secrets only in env (no secret manager); dead-letter outbox unmonitored. |
@@ -67,7 +69,7 @@ Severity: 🔴 S1 critical (blocker) · 🟠 S2 high · 🟡 S3 medium · ⚪ S4
 ## 6. Permission Gaps
 | ID | Sev | Status | Finding |
 |---|---|---|---|
-| PRM-01 | 🔴 | OPEN | **Tenant isolation not enforced at runtime** (RLS bypass — BUG-01). |
+| PRM-01 | 🔴 | ✅ FIXED | Tenant isolation now enforced (RLS active via `erp_app` — BUG-01; isolation test). |
 | PRM-02 | 🟠 | OPEN | Data scope is **company-only**; territory/owner/branch scope (Sales→own, PM→own per RBAC doc) **not modeled**. |
 | PRM-03 | 🟠 | OPEN | DOA value-band unenforced (LOG-01). |
 | PRM-04 | 🟡 | OPEN | Export over-exposure (LOG-03). |
@@ -100,8 +102,8 @@ Severity: 🔴 S1 critical (blocker) · 🟠 S2 high · 🟡 S3 medium · ⚪ S4
 | 2 | Statutory: GST + e-invoice + e-way bill certified | ❌ FAIL | not implemented (REQ-02) |
 | 3 | Finance / Billing / Revenue recognition | ❌ FAIL | not built (REQ-03) |
 | 4 | Engineering / BOM / PLM | ❌ FAIL | not built (REQ-04) |
-| 5 | Authentication: JWT enforced (no fail-open), MFA, password policy | ❌ FAIL | BUG-02, SEC-02 |
-| 6 | Tenant isolation enforced (RLS active via `erp_app`) | ❌ FAIL | BUG-01 / PRM-01 |
+| 5 | Authentication: JWT enforced (no fail-open), MFA, password policy | ◑ PARTIAL | fail-open fixed ✅ (BUG-02); MFA + password/login flow still missing (SEC-02) |
+| 6 | Tenant isolation enforced (RLS active via `erp_app`) | ✅ PASS | BUG-01 fixed; proven by isolation test |
 | 7 | Authorization: DOA + SoD + data scope | ❌ FAIL | SoD ✅; DOA & scope open (LOG-01, PRM-02) |
 | 8 | App security (XSS, deps, headers, rate-limit) | ◑ PARTIAL | controls added (SEC-05); rate-limit store per-instance |
 | 9 | Performance load-tested to NFR (dashboard <3s, posting <1s) | ❌ FAIL | not tested; quick wins unapplied (PERF) |
@@ -115,7 +117,7 @@ Severity: 🔴 S1 critical (blocker) · 🟠 S2 high · 🟡 S3 medium · ⚪ S4
 | 17 | UAT sign-off per module | ❌ FAIL | not performed |
 | 18 | Documentation | ✅ PASS | extensive and current |
 
-**Score: 1 PASS · 3 PARTIAL · 14 FAIL.**
+**Score: 2 PASS · 4 PARTIAL · 12 FAIL** (was 1/3/14 — gate 6 now PASS, gate 5 PARTIAL after the BUG-01/BUG-02 fixes).
 
 ## Board Sign-offs
 | Role | Verdict | Top reason |

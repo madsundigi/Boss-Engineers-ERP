@@ -100,4 +100,24 @@ d('Enquiry API (integration)', () => {
     expect(res.headers['content-type']).toMatch(/text\/csv/);
     expect(res.text).toContain('Enquiry No');
   });
+
+  it('RLS isolates tenants even on an unfiltered query (BUG-01 fix)', async () => {
+    // Under the erp_app role, an UNFILTERED scan still returns 0 rows for a
+    // different company and >0 for the correct one — proving RLS is enforced,
+    // not just the app-level WHERE company_id filter.
+    const c = await pool.connect();
+    try {
+      await c.query('BEGIN');
+      await c.query('SET LOCAL ROLE erp_app');
+      await c.query(`SELECT set_config('app.company_id', '999999', true)`);
+      const wrong = await c.query<{ n: number }>('SELECT count(*)::int AS n FROM sales.enquiry');
+      await c.query(`SELECT set_config('app.company_id', $1, true)`, [String(companyId)]);
+      const right = await c.query<{ n: number }>('SELECT count(*)::int AS n FROM sales.enquiry');
+      await c.query('COMMIT');
+      expect(wrong.rows[0].n).toBe(0);
+      expect(right.rows[0].n).toBeGreaterThan(0);
+    } finally {
+      c.release();
+    }
+  });
 });

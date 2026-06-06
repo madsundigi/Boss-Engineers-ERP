@@ -1,5 +1,5 @@
 import { Pool, QueryResultRow } from 'pg';
-import { runInContext, Queryable } from '../../db/pool';
+import { runInContext, runRead, Queryable } from '../../db/pool';
 import { RequestContext } from '../../common/request-context';
 import { Enquiry, EnquiryListResult } from './enquiry.types';
 import { ListQueryDto } from './enquiry.dto';
@@ -64,12 +64,14 @@ export class EnquiryRepository {
   }
 
   async findById(ctx: RequestContext, id: number): Promise<Enquiry | null> {
-    const res = await this.pool.query(
-      `SELECT ${COLS} FROM sales.enquiry
-        WHERE enquiry_id = $1 AND company_id = $2 AND NOT is_deleted`,
-      [id, ctx.companyId],
-    );
-    return res.rowCount ? mapRow(res.rows[0]) : null;
+    return runRead(this.pool, ctx, async (c) => {
+      const res = await c.query(
+        `SELECT ${COLS} FROM sales.enquiry
+          WHERE enquiry_id = $1 AND company_id = $2 AND NOT is_deleted`,
+        [id, ctx.companyId],
+      );
+      return res.rowCount ? mapRow(res.rows[0]) : null;
+    });
   }
 
   async list(ctx: RequestContext, q: ListQueryDto): Promise<EnquiryListResult> {
@@ -83,21 +85,23 @@ export class EnquiryRepository {
       where.push(`(customer_name ILIKE $${i} OR contact_person ILIKE $${i} OR email ILIKE $${i})`);
     }
     const whereSql = where.join(' AND ');
+    const offset = (q.page - 1) * q.pageSize;
 
-    const totalRes = await this.pool.query<{ total: string }>(
+    return runRead(this.pool, ctx, async (c) => {
+    const totalRes = await c.query<{ total: string }>(
       `SELECT count(*)::text AS total FROM sales.enquiry WHERE ${whereSql}`,
       params,
     );
     const total = Number(totalRes.rows[0].total);
 
-    const offset = (q.page - 1) * q.pageSize;
-    const rowsRes = await this.pool.query(
+    const rowsRes = await c.query(
       `SELECT ${COLS} FROM sales.enquiry WHERE ${whereSql}
         ORDER BY ${q.sort} ${q.dir.toUpperCase()}
         LIMIT ${q.pageSize} OFFSET ${offset}`,
       params,
     );
     return { rows: rowsRes.rows.map(mapRow), total, page: q.page, pageSize: q.pageSize };
+    });
   }
 
   /** Optimistic-locked field update. Returns null if version did not match. */
