@@ -29,4 +29,7 @@
 \echo '== Part 8 : RBAC (roles, permissions, grants, SoD) =='
 \ir 08_rbac.sql
 
+\echo '== Part 9 : enterprise audit (unified event stream + integrity seals) =='
+\ir 09_audit.sql
+
 \echo '== Boss Engineers ERP schema build complete =='
