@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Customer Enquiries — Boss Engineers ERP</title>
+<link rel="stylesheet" href="../../design-system/tokens.css">
+<link rel="stylesheet" href="../../design-system/components.css">
+</head>
+<body class="density-compact">
+<div class="erp-shell">
+  <header class="erp-topbar">
+    <div class="erp-topbar__brand"><span class="erp-topbar__logo">BE</span> Boss Engineers ERP</div>
+    <div class="erp-topbar__search"><input type="search" placeholder="Search…  (Ctrl+/)"></div>
+    <div class="erp-topbar__spacer"></div>
+    <div class="erp-topbar__actions">
+      <button class="erp-topbar__icon" title="Approvals">✔<span class="erp-topbar__badge">7</span></button>
+      <div class="erp-topbar__user"><span class="erp-avatar">ST</span><span>S. Thakur</span></div>
+    </div>
+  </header>
+  <nav class="erp-sidebar">
+    <div class="erp-nav__section">Sales</div>
+    <a class="erp-nav__item is-active" href="enquiry-list.html"><span class="erp-nav__icon">▷</span> Enquiries <span class="erp-nav__count" id="navCount">—</span></a>
+    <a class="erp-nav__item"><span class="erp-nav__icon">▷</span> Quotations</a>
+    <div class="erp-nav__section">Operations</div>
+    <a class="erp-nav__item"><span class="erp-nav__icon">▣</span> Purchase Orders</a>
+    <a class="erp-nav__item"><span class="erp-nav__icon">▤</span> Inventory</a>
+  </nav>
+  <main class="erp-content"><div class="erp-page erp-stack">
+    <div class="erp-breadcrumb"><a>Home</a><span>/</span><a>Sales</a><span>/</span>Enquiries</div>
+    <div class="erp-page__head">
+      <div><h1 class="erp-page__title">Customer Enquiries</h1>
+        <div class="erp-page__subtitle">Mumbai Plant · FY 2026-27</div></div>
+      <div class="erp-row">
+        <a class="erp-btn" id="exportBtn">Export</a>
+        <a class="erp-btn erp-btn--primary" href="enquiry-form.html">+ New Enquiry</a>
+      </div>
+    </div>
+    <section class="erp-card">
+      <div class="erp-table-toolbar">
+        <span class="erp-table-toolbar__title">All Enquiries <span class="erp-table-toolbar__count" id="count">· loading…</span></span>
+        <div class="erp-table-toolbar__spacer"></div>
+        <select class="erp-select" style="width:140px" id="fStatus">
+          <option value="">All statuses</option><option>NEW</option><option>QUALIFIED</option>
+          <option>QUOTED</option><option>CONVERTED</option><option>LOST</option><option>ON_HOLD</option></select>
+        <select class="erp-select" style="width:130px" id="fSource">
+          <option value="">All sources</option><option>EMAIL</option><option>WEB</option><option>PHONE</option>
+          <option>REFERRAL</option><option>EXHIBITION</option><option>WALKIN</option><option>REP</option></select>
+      </div>
+      <div class="erp-table-wrap">
+        <table class="erp-table">
+          <thead><tr>
+            <th class="col-check"><input type="checkbox"></th>
+            <th class="is-sortable">Enquiry No <span class="sort-ind">▼</span></th>
+            <th>Customer</th><th>Contact</th><th>Industry</th><th>Source</th><th>Status</th><th>Created</th>
+          </tr></thead>
+          <tbody id="rows"><!-- populated by render() --></tbody>
+        </table>
+      </div>
+      <div class="erp-pagination"><span>Rows per page: 25</span><div class="erp-pagination__spacer"></div>
+        <span id="pageinfo">—</span>
+        <button class="erp-pagination__btn" disabled>‹</button><button class="erp-pagination__btn">›</button></div>
+    </section>
+  </div></main>
+</div>
+<script src="api-client.js"></script>
+<script>
+  // Fallback sample so the screen renders without a live API (screenshots/dev).
+  const SAMPLE = [
+    {enquiryId:3,enquiryNo:'ENQ/MUM/2026-27/000003',customerName:'Tata Projects Ltd',contact:'R. Iyer',industry:'EPC',source:'REFERRAL',status:'NEW',createdAt:'2026-06-06'},
+    {enquiryId:2,enquiryNo:'ENQ/MUM/2026-27/000002',customerName:'JSW Steel',contact:'A. Kulkarni',industry:'Steel',source:'WEB',status:'QUALIFIED',createdAt:'2026-06-05'},
+    {enquiryId:1,enquiryNo:'ENQ/MUM/2026-27/000001',customerName:'Adani Ports',contact:'M. Shah',industry:'Logistics',source:'EXHIBITION',status:'QUOTED',createdAt:'2026-06-04'},
+    {enquiryId:7,enquiryNo:'ENQ/PUN/2026-27/000004',customerName:'Cummins India',contact:'S. Rao',industry:'Engines',source:'EMAIL',status:'CONVERTED',createdAt:'2026-06-02'},
+    {enquiryId:9,enquiryNo:'ENQ/PUN/2026-27/000005',customerName:'Bharat Forge',contact:'P. Desai',industry:'Forging',source:'PHONE',status:'LOST',createdAt:'2026-05-30'},
+  ];
+  const BADGE = {NEW:'draft',QUALIFIED:'progress',QUOTED:'hold',CONVERTED:'approved',LOST:'rejected',ON_HOLD:'hold'};
+  function render(list){
+    document.getElementById('rows').innerHTML = list.map(e => `
+      <tr onclick="location.href='enquiry-detail.html'">
+        <td class="col-check"><input type="checkbox" onclick="event.stopPropagation()"></td>
+        <td class="mono">${e.enquiryNo}</td><td>${e.customerName}</td><td>${e.contact??'—'}</td>
+        <td>${e.industry??'—'}</td><td>${e.source??'—'}</td>
+        <td><span class="erp-badge erp-badge--${BADGE[e.status]||'draft'}">${e.status}</span></td>
+        <td>${e.createdAt}</td></tr>`).join('');
+    document.getElementById('count').textContent = '· ' + list.length + ' records';
+    document.getElementById('pageinfo').textContent = '1–'+list.length+' of '+list.length;
+    document.getElementById('navCount').textContent = list.length;
+  }
+  // Try the live API; fall back to sample data on any error.
+  (async () => {
+    try { const res = await EnquiryApi.list(); render(res.rows || SAMPLE); }
+    catch { render(SAMPLE); }
+  })();
+</script>
+</body>
+</html>

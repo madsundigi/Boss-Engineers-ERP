@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New Enquiry — Boss Engineers ERP</title>
+<link rel="stylesheet" href="../../design-system/tokens.css">
+<link rel="stylesheet" href="../../design-system/components.css">
+</head>
+<body>
+<div class="erp-shell">
+  <header class="erp-topbar">
+    <div class="erp-topbar__brand"><span class="erp-topbar__logo">BE</span> Boss Engineers ERP</div>
+    <div class="erp-topbar__spacer"></div>
+    <div class="erp-topbar__actions"><div class="erp-topbar__user"><span class="erp-avatar">ST</span><span>S. Thakur</span></div></div>
+  </header>
+  <nav class="erp-sidebar">
+    <div class="erp-nav__section">Sales</div>
+    <a class="erp-nav__item is-active" href="enquiry-list.html"><span class="erp-nav__icon">▷</span> Enquiries</a>
+    <a class="erp-nav__item"><span class="erp-nav__icon">▷</span> Quotations</a>
+  </nav>
+  <main class="erp-content"><div class="erp-page erp-stack" style="max-width:900px">
+    <div class="erp-breadcrumb"><a href="enquiry-list.html">Enquiries</a><span>/</span>New</div>
+    <div class="erp-page__head"><div><h1 class="erp-page__title">New Customer Enquiry</h1>
+      <div class="erp-page__subtitle">Capture a lead — a number is allocated on save</div></div></div>
+    <section class="erp-card" style="padding:var(--sp-5)">
+      <form class="erp-form" id="enqForm">
+        <div class="erp-form__section">
+          <div class="erp-form__legend">Enquiry Details</div>
+          <div class="erp-form__grid">
+            <div class="erp-field erp-field--6"><label class="erp-label">Customer Name <span class="req">*</span></label>
+              <input class="erp-input" name="customerName" required placeholder="e.g. Tata Projects Ltd"></div>
+            <div class="erp-field erp-field--6"><label class="erp-label">Contact</label>
+              <input class="erp-input" name="contact" placeholder="Contact person"></div>
+            <div class="erp-field erp-field--6"><label class="erp-label">Email</label>
+              <input class="erp-input" name="email" type="email" placeholder="name@company.com">
+              <span class="erp-field__hint">Validated on the client and at the database.</span></div>
+            <div class="erp-field erp-field--6"><label class="erp-label">Industry</label>
+              <input class="erp-input" name="industry" placeholder="e.g. EPC / Steel / Cement"></div>
+            <div class="erp-field erp-field--6"><label class="erp-label">Source</label>
+              <select class="erp-select" name="source">
+                <option value="">— select —</option><option>EMAIL</option><option>WEB</option><option>PHONE</option>
+                <option>REFERRAL</option><option>EXHIBITION</option><option>WALKIN</option><option>REP</option><option>OTHER</option></select></div>
+            <div class="erp-field erp-field--6"><label class="erp-label">Status</label>
+              <input class="erp-input" value="NEW" readonly><span class="erp-field__hint">Set automatically on creation.</span></div>
+            <div class="erp-field erp-field--12"><label class="erp-label">Address</label>
+              <textarea class="erp-textarea" name="address" placeholder="Site / billing address"></textarea></div>
+            <div class="erp-field erp-field--12"><label class="erp-label">Requirement</label>
+              <textarea class="erp-textarea" name="requirement" placeholder="Scope / specification of the enquiry"></textarea></div>
+          </div>
+        </div>
+        <div class="erp-form__actions">
+          <a class="erp-btn" href="enquiry-list.html">Cancel</a>
+          <button type="submit" class="erp-btn erp-btn--primary">Save Enquiry</button>
+        </div>
+      </form>
+    </section>
+  </div></main>
+</div>
+<div class="erp-toast-region" id="toasts"></div>
+<script src="api-client.js"></script>
+<script>
+  function toast(msg, kind){ const r=document.getElementById('toasts');
+    const t=document.createElement('div'); t.className='erp-toast'+(kind?' erp-toast--'+kind:'');
+    t.innerHTML='<div class="erp-toast__body"><div class="erp-toast__title">'+msg+'</div></div>';
+    r.appendChild(t); setTimeout(()=>t.remove(),4000); }
+  document.getElementById('enqForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target); const dto = {};
+    for (const [k,v] of f.entries()) if (v) dto[k]=v;
+    try { const created = await EnquiryApi.create(dto);
+      toast('Enquiry '+created.enquiryNo+' created','success');
+      setTimeout(()=>location.href='enquiry-detail.html',800);
+    } catch (err) { toast(err.message || 'Save failed','error'); }
+  });
+</script>
+</body>
+</html>

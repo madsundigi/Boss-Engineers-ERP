@@ -6,6 +6,12 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "4173", "--directory", "design-system"],
       "port": 4173
+    },
+    {
+      "name": "erp-root",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "4174"],
+      "port": 4174
     }
   ]
 }
