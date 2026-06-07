@@ -21,6 +21,9 @@ import { failureRouter } from './modules/failure/failure.routes';
 import { deliveryRouter } from './modules/delivery/delivery.routes';
 import { bomRouter } from './modules/bom/bom.routes';
 import { glRouter } from './modules/gl/gl.routes';
+import { billingRouter } from './modules/billing/billing.routes';
+import { payablesRouter } from './modules/payables/payables.routes';
+import { taxRouter } from './modules/tax/tax.routes';
 import { EmailService, EmailTransport, buildEmailTransport } from './services/email.service';
 import { PdfService } from './services/pdf.service';
 import { OutboxRelay } from './outbox/relay';
@@ -63,6 +66,9 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
   app.use('/api/delivery-forecasts', deliveryRouter(pool));
   app.use('/api/boms', bomRouter(pool));
   app.use('/api/gl', glRouter(pool));
+  app.use('/api/invoices', billingRouter(pool));
+  app.use('/api/ap-invoices', payablesRouter(pool));
+  app.use('/api/tax', taxRouter(pool));
 
   // Transactional outbox relay: dispatches committed domain events (e.g. emails
   // the quotation PDF on 'quotation.sent'). Exposed for the server poller and tests.
@@ -89,6 +95,11 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
     ['delivery.at_risk', ack],
     ['bom.released', ack],
     ['gl.journal.posted', ack],
+    ['invoice.posted', ack],
+    ['payment.received', ack],
+    ['vendor_invoice.approved', ack],
+    ['einvoice.generated', ack],
+    ['eway_bill.generated', ack],
   ]);
   app.locals.outboxRelay = new OutboxRelay(pool, handlers);
 
