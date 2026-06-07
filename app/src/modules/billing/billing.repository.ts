@@ -355,7 +355,13 @@ export class BillingRepository {
         // Refresh THIS invoice's paid status from the live allocation sum.
         await this.refreshInvoicePaidStatus(c, ctx, a.invoiceId);
       }
-      await emitOutbox(c, event);
+      // Stamp the just-allocated receipt id/no onto the event so downstream
+      // consumers (e.g. GL auto-posting) can dedupe and read the row by PK.
+      await emitOutbox(c, {
+        ...event,
+        aggregateId: receipt.receiptId,
+        payload: { ...event.payload, receiptNo: receipt.receiptNo },
+      });
       return { ...receipt, allocations };
     });
   }

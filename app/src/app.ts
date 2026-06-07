@@ -26,6 +26,9 @@ import { payablesRouter } from './modules/payables/payables.routes';
 import { taxRouter } from './modules/tax/tax.routes';
 import { profitabilityRouter } from './modules/profitability/profitability.routes';
 import { dashboardRouter } from './modules/dashboard/dashboard.routes';
+import {
+  invoicePostedGlHandler, paymentReceivedGlHandler, vendorInvoiceApprovedGlHandler,
+} from './modules/gl/gl.handlers';
 import { EmailService, EmailTransport, buildEmailTransport } from './services/email.service';
 import { PdfService } from './services/pdf.service';
 import { OutboxRelay } from './outbox/relay';
@@ -99,9 +102,10 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
     ['delivery.at_risk', ack],
     ['bom.released', ack],
     ['gl.journal.posted', ack],
-    ['invoice.posted', ack],
-    ['payment.received', ack],
-    ['vendor_invoice.approved', ack],
+    // Finance subledgers auto-post a balanced journal to the GL (idempotent).
+    ['invoice.posted', invoicePostedGlHandler(pool)],
+    ['payment.received', paymentReceivedGlHandler(pool)],
+    ['vendor_invoice.approved', vendorInvoiceApprovedGlHandler(pool)],
     ['einvoice.generated', ack],
     ['eway_bill.generated', ack],
     ['margin.snapshot.created', ack],

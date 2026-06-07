@@ -257,7 +257,7 @@ export class BillingService {
     const event: OutboxEventInput = {
       eventType: PAYMENT_RECEIVED_EVENT,
       aggregateType: DOC_TYPE_RECEIPT,
-      aggregateId: null, // receipt_id is allocated in the same tx; not known here
+      aggregateId: null, // stamped with the real receipt_id by repo.createReceipt
       companyId: ctx.companyId,
       createdBy: ctx.userId,
       payload: {
