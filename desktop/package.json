@@ -1,0 +1,29 @@
+{
+  "name": "boss-engineers-erp-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Boss Engineers ERP desktop client (Electron)",
+  "main": "main.js",
+  "scripts": {
+    "build:web": "cd ../web && npm install && npm run build",
+    "sync": "rm -rf renderer && cp -r ../web/dist renderer",
+    "start": "npm run sync && electron .",
+    "dist": "npm run build:web && npm run sync && electron-builder --mac dmg"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.bossengineers.erp",
+    "productName": "Boss Engineers ERP",
+    "directories": { "output": "release" },
+    "files": ["main.js", "renderer/**/*"],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.business",
+      "identity": null
+    },
+    "dmg": { "title": "Boss Engineers ERP ${version}" }
+  }
+}
