@@ -24,6 +24,8 @@ import { glRouter } from './modules/gl/gl.routes';
 import { billingRouter } from './modules/billing/billing.routes';
 import { payablesRouter } from './modules/payables/payables.routes';
 import { taxRouter } from './modules/tax/tax.routes';
+import { profitabilityRouter } from './modules/profitability/profitability.routes';
+import { dashboardRouter } from './modules/dashboard/dashboard.routes';
 import { EmailService, EmailTransport, buildEmailTransport } from './services/email.service';
 import { PdfService } from './services/pdf.service';
 import { OutboxRelay } from './outbox/relay';
@@ -69,6 +71,8 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
   app.use('/api/invoices', billingRouter(pool));
   app.use('/api/ap-invoices', payablesRouter(pool));
   app.use('/api/tax', taxRouter(pool));
+  app.use('/api/profitability', profitabilityRouter(pool));
+  app.use('/api/dashboard', dashboardRouter(pool));
 
   // Transactional outbox relay: dispatches committed domain events (e.g. emails
   // the quotation PDF on 'quotation.sent'). Exposed for the server poller and tests.
@@ -100,6 +104,7 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
     ['vendor_invoice.approved', ack],
     ['einvoice.generated', ack],
     ['eway_bill.generated', ack],
+    ['margin.snapshot.created', ack],
   ]);
   app.locals.outboxRelay = new OutboxRelay(pool, handlers);
 
