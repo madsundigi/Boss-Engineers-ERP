@@ -187,7 +187,12 @@ export class QuotationService {
     if (existing.status !== 'SENT' && existing.status !== 'NEGOTIATION') {
       throw Errors.conflict(`Only a SENT/NEGOTIATION quote can be won (status ${existing.status})`);
     }
-    const q = await this.repo.updateStatus(ctx, id, rowVersion, 'WON', {});
+    // Emit 'quotation.won' so the project module auto-seeds a Project (FRD §5).
+    const q = await this.repo.updateStatus(ctx, id, rowVersion, 'WON', {}, {
+      eventType: 'quotation.won', aggregateType: 'QUOTATION', aggregateId: id,
+      companyId: ctx.companyId, createdBy: ctx.userId,
+      payload: { quotationNo: existing.quotationNo },
+    });
     if (!q) throw Errors.conflict('Row version mismatch');
     // sync: the originating enquiry is now CONVERTED
     if (existing.enquiryId) {

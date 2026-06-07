@@ -35,6 +35,7 @@ import { contractRouter } from './modules/contract/contract.routes';
 import {
   invoicePostedGlHandler, paymentReceivedGlHandler, vendorInvoiceApprovedGlHandler,
 } from './modules/gl/gl.handlers';
+import { quotationWonHandler } from './modules/project/project.handlers';
 import { EmailService, EmailTransport, buildEmailTransport } from './services/email.service';
 import { PdfService } from './services/pdf.service';
 import { OutboxRelay } from './outbox/relay';
@@ -109,6 +110,8 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
   const ack: OutboxHandler = async () => undefined;
   const handlers = new Map<string, OutboxHandler>([
     ['quotation.sent', quotationSentHandler(pool, new PdfService(), email)],
+    // Winning a quotation auto-seeds a Project (idempotent on quotation_id).
+    ['quotation.won', quotationWonHandler(pool)],
     ['project.created', ack],
     ['project.approved', ack],
     ['fat.passed', ack],
