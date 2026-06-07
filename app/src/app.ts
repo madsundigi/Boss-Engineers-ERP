@@ -16,6 +16,9 @@ import { procurementRouter } from './modules/procurement/procurement.routes';
 import { productionRouter } from './modules/production/production.routes';
 import { dispatchRouter } from './modules/dispatch/dispatch.routes';
 import { serviceRouter } from './modules/service/service.routes';
+import { installationRouter } from './modules/installation/installation.routes';
+import { failureRouter } from './modules/failure/failure.routes';
+import { deliveryRouter } from './modules/delivery/delivery.routes';
 import { EmailService, EmailTransport, buildEmailTransport } from './services/email.service';
 import { PdfService } from './services/pdf.service';
 import { OutboxRelay } from './outbox/relay';
@@ -53,6 +56,9 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
   app.use('/api/work-orders', productionRouter(pool));
   app.use('/api/dispatch', dispatchRouter(pool));
   app.use('/api/service-tickets', serviceRouter(pool));
+  app.use('/api/installations', installationRouter(pool));
+  app.use('/api/ncrs', failureRouter(pool));
+  app.use('/api/delivery-forecasts', deliveryRouter(pool));
 
   // Transactional outbox relay: dispatches committed domain events (e.g. emails
   // the quotation PDF on 'quotation.sent'). Exposed for the server poller and tests.
@@ -74,6 +80,9 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
     ['dispatch.released', ack],
     ['service_ticket.resolved', ack],
     ['warranty_claim.approved', ack],
+    ['installation.accepted', ack],
+    ['ncr.closed', ack],
+    ['delivery.at_risk', ack],
   ]);
   app.locals.outboxRelay = new OutboxRelay(pool, handlers);
 
