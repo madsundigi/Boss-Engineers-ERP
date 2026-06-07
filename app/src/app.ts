@@ -19,6 +19,8 @@ import { serviceRouter } from './modules/service/service.routes';
 import { installationRouter } from './modules/installation/installation.routes';
 import { failureRouter } from './modules/failure/failure.routes';
 import { deliveryRouter } from './modules/delivery/delivery.routes';
+import { bomRouter } from './modules/bom/bom.routes';
+import { glRouter } from './modules/gl/gl.routes';
 import { EmailService, EmailTransport, buildEmailTransport } from './services/email.service';
 import { PdfService } from './services/pdf.service';
 import { OutboxRelay } from './outbox/relay';
@@ -59,6 +61,8 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
   app.use('/api/installations', installationRouter(pool));
   app.use('/api/ncrs', failureRouter(pool));
   app.use('/api/delivery-forecasts', deliveryRouter(pool));
+  app.use('/api/boms', bomRouter(pool));
+  app.use('/api/gl', glRouter(pool));
 
   // Transactional outbox relay: dispatches committed domain events (e.g. emails
   // the quotation PDF on 'quotation.sent'). Exposed for the server poller and tests.
@@ -83,6 +87,8 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
     ['installation.accepted', ack],
     ['ncr.closed', ack],
     ['delivery.at_risk', ack],
+    ['bom.released', ack],
+    ['gl.journal.posted', ack],
   ]);
   app.locals.outboxRelay = new OutboxRelay(pool, handlers);
 
