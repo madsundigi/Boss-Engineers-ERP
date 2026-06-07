@@ -1,6 +1,10 @@
-import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
+import { Pool, PoolClient, QueryResult, QueryResultRow, types } from 'pg';
 import { env } from '../config/env';
 import { RequestContext } from '../common/request-context';
+
+// Return SQL DATE (oid 1082) as a plain 'YYYY-MM-DD' string rather than a
+// timezone-shifted JS Date — avoids off-by-one date bugs across all modules.
+types.setTypeParser(1082, (v) => v);
 
 /** Minimal queryable surface satisfied by both Pool and PoolClient. */
 export interface Queryable {
