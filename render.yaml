@@ -1,0 +1,46 @@
+# =====================================================================
+# Boss Engineers ERP — Render blueprint (API + managed Postgres)
+# Docs: https://render.com/docs/blueprint-spec
+# One-time DB bootstrap (schema + login role + admin password) is a manual step
+# the first time — see DEPLOY.md. Each deploy runs migrations via preDeployCommand.
+# =====================================================================
+databases:
+  - name: be-erp-db
+    databaseName: boss_engineers_erp
+    plan: basic-256mb            # bump as needed
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: be-erp-api
+    runtime: docker
+    dockerfilePath: app/Dockerfile
+    dockerContext: app
+    plan: starter
+    healthCheckPath: /health
+    # Run pending migrations before the new version goes live.
+    preDeployCommand: node dist/scripts/migrate.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+      - key: DATABASE_URL
+        # Use the app login role (erp_app_login) so RLS is enforced — see DEPLOY.md.
+        # Set this manually in the dashboard to the erp_app_login connection string;
+        # the fromDatabase value below is the OWNER URL, used only for one-time bootstrap.
+        fromDatabase:
+          name: be-erp-db
+          property: connectionString
+      - key: AUTH_JWT_SECRET
+        generateValue: true       # Render generates a strong random secret
+      - key: AUTH_JWT_TTL
+        value: 8h
+      - key: CORS_ORIGINS
+        sync: false               # set to your frontend/desktop origin(s)
+      - key: LOG_LEVEL
+        value: info
+      - key: SMTP_URL
+        sync: false               # optional; omit to use the in-memory outbox
+      - key: MAIL_FROM
+        sync: false

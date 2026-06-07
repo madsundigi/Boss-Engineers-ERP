@@ -13,9 +13,11 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
-# Compile TypeScript to dist/.
+# Compile TypeScript to dist/ (src + scripts; migrations are SQL, copied as-is).
 COPY tsconfig.json ./
 COPY src ./src
+COPY scripts ./scripts
+COPY migrations ./migrations
 RUN npm run build
 
 # Strip dev dependencies so they are not copied into the runtime image.
@@ -30,9 +32,12 @@ WORKDIR /app
 # node:alpine ships a non-root "node" user (uid 1000); run as it.
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
+# migrate.js resolves its SQL via __dirname/../migrations -> dist/migrations.
+COPY --from=build --chown=node:node /app/migrations ./dist/migrations
 COPY --chown=node:node package.json ./
 
 USER node
 EXPOSE 3001
 
-CMD ["node", "dist/server.js"]
+# Run pending migrations (idempotent) on boot, then start the API.
+CMD ["sh", "-c", "node dist/scripts/migrate.js && node dist/src/server.js"]
