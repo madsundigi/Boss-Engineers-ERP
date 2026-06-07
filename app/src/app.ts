@@ -26,6 +26,12 @@ import { payablesRouter } from './modules/payables/payables.routes';
 import { taxRouter } from './modules/tax/tax.routes';
 import { profitabilityRouter } from './modules/profitability/profitability.routes';
 import { dashboardRouter } from './modules/dashboard/dashboard.routes';
+import { authRouter } from './modules/auth/auth.routes';
+import { changeRouter } from './modules/change/change.routes';
+import { qualityRouter } from './modules/quality/quality.routes';
+import { hrRouter } from './modules/hr/hr.routes';
+import { subcontractRouter } from './modules/subcontract/subcontract.routes';
+import { contractRouter } from './modules/contract/contract.routes';
 import {
   invoicePostedGlHandler, paymentReceivedGlHandler, vendorInvoiceApprovedGlHandler,
 } from './modules/gl/gl.handlers';
@@ -51,9 +57,21 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
 
   app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
+  // Public token issuance (no auth guard) — clients log in here to get a JWT.
+  app.use('/auth', authRouter(pool));
+
   // All /api routes are authenticated (gateway-injected identity + tenant).
   const auth = new AuthService(pool);
   app.use('/api', authenticate(auth));
+
+  // Identity echo for the authenticated caller (drives the frontend session).
+  app.get('/api/me', (req, res) => {
+    const ctx = req.context!; // guaranteed by authenticate() above
+    res.json({
+      userId: ctx.userId, username: ctx.username, companyId: ctx.companyId,
+      buId: ctx.buId, permissions: [...ctx.permissions],
+    });
+  });
 
   app.use('/api/enquiries', enquiryRouter(pool));
   app.use('/api/quotations', quotationRouter(pool));
@@ -76,6 +94,11 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
   app.use('/api/tax', taxRouter(pool));
   app.use('/api/profitability', profitabilityRouter(pool));
   app.use('/api/dashboard', dashboardRouter(pool));
+  app.use('/api/change-orders', changeRouter(pool));
+  app.use('/api/inspections', qualityRouter(pool));
+  app.use('/api/hr', hrRouter(pool));
+  app.use('/api/subcontracts', subcontractRouter(pool));
+  app.use('/api/contracts', contractRouter(pool));
 
   // Transactional outbox relay: dispatches committed domain events (e.g. emails
   // the quotation PDF on 'quotation.sent'). Exposed for the server poller and tests.
@@ -109,6 +132,11 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
     ['einvoice.generated', ack],
     ['eway_bill.generated', ack],
     ['margin.snapshot.created', ack],
+    ['change_order.approved', ack],
+    ['inspection.failed', ack],
+    ['leave.approved', ack],
+    ['subcontract.received', ack],
+    ['contract.activated', ack],
   ]);
   app.locals.outboxRelay = new OutboxRelay(pool, handlers);
 

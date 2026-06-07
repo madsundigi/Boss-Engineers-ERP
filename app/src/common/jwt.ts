@@ -17,6 +17,23 @@ export interface AccessTokenClaims {
   buId?: number;
 }
 
+/** Default access-token lifetime; override with AUTH_JWT_TTL (e.g. '8h', '30m'). */
+const DEFAULT_TTL = process.env.AUTH_JWT_TTL ?? '8h';
+
+/**
+ * Sign a short-lived access token from trusted identity claims. Throws if
+ * AUTH_JWT_SECRET is not configured — token issuance must never silently
+ * produce an unverifiable token. The login route is the only caller.
+ */
+export function signAccessToken(claims: AccessTokenClaims): { token: string; expiresIn: string } {
+  const secret = process.env.AUTH_JWT_SECRET;
+  if (!secret) throw new Error('AUTH_JWT_SECRET is not configured');
+  const payload: Record<string, number> = { userId: claims.userId, companyId: claims.companyId };
+  if (claims.buId !== undefined) payload.buId = claims.buId;
+  const token = jwt.sign(payload, secret, { expiresIn: DEFAULT_TTL } as jwt.SignOptions);
+  return { token, expiresIn: DEFAULT_TTL };
+}
+
 /** Coerce a claim that may be a number or numeric string into a positive int. */
 function toPositiveInt(value: unknown): number | undefined {
   const n = typeof value === 'number' ? value : Number(value);
