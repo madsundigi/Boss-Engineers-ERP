@@ -1,0 +1,273 @@
+/* =====================================================================
+   Boss Engineers ERP — Design System : COMPONENTS
+   Consumes tokens.css. Framework-agnostic. BEM-ish .erp-* classes.
+   ===================================================================== */
+
+/* ---- Base / reset ---- */
+*,*::before,*::after{ box-sizing:border-box; }
+html,body{ margin:0; height:100%; }
+body{
+  font-family:var(--font-sans); font-size:var(--fs-13); line-height:var(--lh-normal);
+  color:var(--c-text); background:var(--c-canvas); -webkit-font-smoothing:antialiased;
+}
+a{ color:var(--c-primary); text-decoration:none; }
+a:hover{ text-decoration:underline; }
+:focus-visible{ outline:2px solid var(--c-focus); outline-offset:1px; border-radius:var(--r-sm); }
+.mono{ font-family:var(--font-mono); }
+.text-muted{ color:var(--c-text-muted); }
+.num{ font-variant-numeric:tabular-nums; }
+
+/* =====================================================================
+   1. LAYOUT — application shell (topbar + sidebar + content)
+   ===================================================================== */
+.erp-shell{ display:grid; grid-template-columns:var(--sidebar-w) 1fr; grid-template-rows:var(--topbar-h) 1fr;
+  grid-template-areas:"topbar topbar" "sidebar content"; height:100vh; }
+.erp-shell--collapsed{ grid-template-columns:var(--sidebar-w-collapsed) 1fr; }
+.erp-topbar{ grid-area:topbar; } .erp-sidebar{ grid-area:sidebar; } .erp-content{ grid-area:content; }
+.erp-content{ overflow:auto; padding:var(--content-pad); }
+.erp-page{ max-width:var(--page-max); margin:0 auto; }
+.erp-page__head{ display:flex; align-items:flex-start; justify-content:space-between; gap:var(--sp-4);
+  margin-bottom:var(--sp-5); }
+.erp-page__title{ font-size:var(--fs-20); font-weight:var(--fw-semibold); margin:0; }
+.erp-page__subtitle{ color:var(--c-text-muted); font-size:var(--fs-13); margin-top:2px; }
+.erp-breadcrumb{ font-size:var(--fs-12); color:var(--c-text-muted); margin-bottom:var(--sp-2); }
+.erp-breadcrumb a{ color:var(--c-text-muted); } .erp-breadcrumb span{ margin:0 var(--sp-1); }
+
+/* =====================================================================
+   2. TOPBAR
+   ===================================================================== */
+.erp-topbar{ display:flex; align-items:center; gap:var(--sp-3); height:var(--topbar-h);
+  background:var(--c-topbar-bg); color:var(--c-topbar-text); border-bottom:1px solid var(--c-topbar-border);
+  padding:0 var(--sp-3); z-index:var(--z-topbar); }
+.erp-topbar__brand{ display:flex; align-items:center; gap:var(--sp-2); font-weight:var(--fw-semibold);
+  font-size:var(--fs-14); padding-right:var(--sp-3); }
+.erp-topbar__logo{ width:24px; height:24px; border-radius:var(--r-sm); background:var(--c-primary);
+  display:grid; place-items:center; color:#fff; font-weight:var(--fw-bold); font-size:var(--fs-12); }
+.erp-topbar__burger{ background:none; border:0; color:var(--c-topbar-text); cursor:pointer;
+  width:32px; height:32px; border-radius:var(--r-sm); }
+.erp-topbar__burger:hover{ background:rgba(255,255,255,.1); }
+.erp-topbar__search{ flex:0 1 360px; }
+.erp-topbar__search input{ width:100%; height:30px; border:1px solid var(--c-topbar-border);
+  background:rgba(255,255,255,.08); color:#fff; border-radius:var(--r-md); padding:0 var(--sp-3); font-size:var(--fs-13); }
+.erp-topbar__search input::placeholder{ color:var(--c-topbar-muted); }
+.erp-topbar__spacer{ flex:1; }
+.erp-topbar__actions{ display:flex; align-items:center; gap:var(--sp-1); }
+.erp-topbar__icon{ position:relative; width:32px; height:32px; border:0; background:none; color:var(--c-topbar-text);
+  border-radius:var(--r-sm); cursor:pointer; font-size:var(--fs-16); }
+.erp-topbar__icon:hover{ background:rgba(255,255,255,.1); }
+.erp-topbar__badge{ position:absolute; top:3px; right:3px; min-width:15px; height:15px; padding:0 3px;
+  background:var(--c-error); color:#fff; font-size:9px; line-height:15px; border-radius:var(--r-pill);
+  text-align:center; font-weight:var(--fw-bold); }
+.erp-topbar__user{ display:flex; align-items:center; gap:var(--sp-2); padding:0 var(--sp-2); cursor:pointer;
+  height:32px; border-radius:var(--r-sm); }
+.erp-topbar__user:hover{ background:rgba(255,255,255,.1); }
+.erp-avatar{ width:26px; height:26px; border-radius:var(--r-pill); background:var(--c-primary); color:#fff;
+  display:grid; place-items:center; font-size:var(--fs-11); font-weight:var(--fw-semibold); }
+
+/* =====================================================================
+   3. SIDEBAR (primary navigation)
+   ===================================================================== */
+.erp-sidebar{ background:var(--c-sidebar-bg); border-right:1px solid var(--c-sidebar-border);
+  overflow-y:auto; z-index:var(--z-sidebar); padding:var(--sp-2) 0; }
+.erp-nav__section{ padding:var(--sp-3) var(--sp-4) var(--sp-1); font-size:var(--fs-11);
+  text-transform:uppercase; letter-spacing:.04em; color:var(--c-sidebar-section); font-weight:var(--fw-semibold); }
+.erp-nav__item{ display:flex; align-items:center; gap:var(--sp-3); height:36px; padding:0 var(--sp-4);
+  color:var(--c-sidebar-text); font-size:var(--fs-13); cursor:pointer; border-left:3px solid transparent;
+  transition:background var(--motion-fast) var(--ease); }
+.erp-nav__item:hover{ background:var(--c-sidebar-hover); text-decoration:none; }
+.erp-nav__item.is-active{ background:var(--c-sidebar-active-bg); color:var(--c-sidebar-active-text);
+  border-left-color:var(--c-primary); font-weight:var(--fw-semibold); }
+.erp-nav__icon{ width:18px; text-align:center; flex:none; opacity:.85; }
+.erp-nav__count{ margin-left:auto; font-size:var(--fs-11); color:var(--c-text-muted);
+  background:var(--c-surface-sunken); padding:0 6px; border-radius:var(--r-pill); }
+
+/* =====================================================================
+   4. BUTTONS (used across forms, tables, modals, approvals)
+   ===================================================================== */
+.erp-btn{ display:inline-flex; align-items:center; justify-content:center; gap:var(--sp-2);
+  height:var(--control-h); padding:0 var(--sp-4); font-family:inherit; font-size:var(--fs-13);
+  font-weight:var(--fw-semibold); border:1px solid var(--c-border-strong); border-radius:var(--r-md);
+  background:var(--c-surface); color:var(--c-text); cursor:pointer; white-space:nowrap;
+  transition:background var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease); }
+.erp-btn:hover{ background:var(--c-surface-alt); }
+.erp-btn:disabled{ opacity:.5; cursor:not-allowed; }
+.erp-btn--primary{ background:var(--c-primary); border-color:var(--c-primary); color:#fff; }
+.erp-btn--primary:hover{ background:var(--c-primary-hover); border-color:var(--c-primary-hover); }
+.erp-btn--danger{ background:var(--c-error); border-color:var(--c-error); color:#fff; }
+.erp-btn--danger:hover{ filter:brightness(.95); }
+.erp-btn--success{ background:var(--c-success); border-color:var(--c-success); color:#fff; }
+.erp-btn--ghost{ background:none; border-color:transparent; }
+.erp-btn--ghost:hover{ background:var(--c-surface-sunken); }
+.erp-btn--sm{ height:26px; padding:0 var(--sp-3); font-size:var(--fs-12); }
+
+/* =====================================================================
+   5. BADGES / STATUS PILLS (ERP document statuses)
+   ===================================================================== */
+.erp-badge{ display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 8px;
+  font-size:var(--fs-11); font-weight:var(--fw-semibold); border-radius:var(--r-pill); white-space:nowrap; }
+.erp-badge::before{ content:""; width:6px; height:6px; border-radius:var(--r-pill); background:currentColor; }
+.erp-badge--draft   { color:var(--c-status-draft);    background:var(--c-status-draft-bg); }
+.erp-badge--pending { color:var(--c-status-pending);  background:var(--c-status-pending-bg); }
+.erp-badge--progress{ color:var(--c-status-progress); background:var(--c-status-progress-bg); }
+.erp-badge--hold    { color:var(--c-status-hold);     background:var(--c-status-hold-bg); }
+.erp-badge--approved{ color:var(--c-status-approved); background:var(--c-status-approved-bg); }
+.erp-badge--rejected{ color:var(--c-status-rejected); background:var(--c-status-rejected-bg); }
+.erp-badge--closed  { color:var(--c-status-closed);   background:var(--c-status-closed-bg); }
+
+/* =====================================================================
+   6. TABLES (data grid: toolbar, selection, sort, pagination)
+   ===================================================================== */
+.erp-card{ background:var(--c-surface); border:1px solid var(--c-border); border-radius:var(--r-md);
+  box-shadow:var(--shadow-card); }
+.erp-table-toolbar{ display:flex; align-items:center; gap:var(--sp-3); padding:var(--sp-2) var(--sp-3);
+  border-bottom:1px solid var(--c-border); }
+.erp-table-toolbar__title{ font-weight:var(--fw-semibold); font-size:var(--fs-14); }
+.erp-table-toolbar__count{ color:var(--c-text-muted); font-weight:var(--fw-regular); font-size:var(--fs-12); }
+.erp-table-toolbar__spacer{ flex:1; }
+.erp-table-wrap{ overflow:auto; }
+.erp-table{ width:100%; border-collapse:collapse; font-size:var(--fs-13); }
+.erp-table thead th{ position:sticky; top:0; z-index:1; background:var(--c-surface-alt);
+  text-align:left; font-weight:var(--fw-semibold); color:var(--c-text-secondary);
+  padding:0 var(--sp-3); height:36px; border-bottom:1px solid var(--c-border-strong);
+  white-space:nowrap; user-select:none; }
+.erp-table th.is-sortable{ cursor:pointer; }
+.erp-table th.is-sortable:hover{ color:var(--c-text); }
+.erp-table th .sort-ind{ color:var(--c-primary); font-size:var(--fs-11); margin-left:4px; }
+.erp-table tbody td{ padding:0 var(--sp-3); height:var(--row-h); border-bottom:1px solid var(--c-border);
+  vertical-align:middle; }
+.erp-table tbody tr:hover{ background:var(--c-surface-alt); }
+.erp-table tbody tr.is-selected{ background:var(--c-primary-subtle); }
+.erp-table .col-num{ text-align:right; font-variant-numeric:tabular-nums; }
+.erp-table .col-check{ width:36px; text-align:center; }
+.erp-table__bulkbar{ display:flex; align-items:center; gap:var(--sp-3); padding:var(--sp-2) var(--sp-3);
+  background:var(--c-primary-subtle); border-bottom:1px solid var(--c-info-border); font-size:var(--fs-13); }
+.erp-pagination{ display:flex; align-items:center; gap:var(--sp-3); padding:var(--sp-2) var(--sp-3);
+  border-top:1px solid var(--c-border); color:var(--c-text-muted); font-size:var(--fs-12); }
+.erp-pagination__spacer{ flex:1; }
+.erp-pagination__btn{ width:28px; height:28px; border:1px solid var(--c-border); background:var(--c-surface);
+  border-radius:var(--r-sm); cursor:pointer; color:var(--c-text-secondary); }
+.erp-pagination__btn:disabled{ opacity:.4; cursor:not-allowed; }
+
+/* =====================================================================
+   7. FORMS
+   ===================================================================== */
+.erp-form__section{ margin-bottom:var(--sp-6); }
+.erp-form__legend{ font-size:var(--fs-14); font-weight:var(--fw-semibold); padding-bottom:var(--sp-2);
+  margin-bottom:var(--sp-4); border-bottom:1px solid var(--c-border); }
+.erp-form__grid{ display:grid; grid-template-columns:repeat(12,1fr); gap:var(--field-gap); }
+.erp-field{ display:flex; flex-direction:column; gap:6px; }
+.erp-field--12{ grid-column:span 12; } .erp-field--6{ grid-column:span 6; }
+.erp-field--4{ grid-column:span 4; }   .erp-field--3{ grid-column:span 3; }
+.erp-label{ font-size:var(--fs-12); font-weight:var(--fw-semibold); color:var(--c-text-secondary); }
+.erp-label .req{ color:var(--c-error); margin-left:2px; }
+.erp-input,.erp-select,.erp-textarea{ width:100%; min-height:var(--control-h); padding:0 var(--sp-3);
+  font-family:inherit; font-size:var(--fs-13); color:var(--c-text); background:var(--c-surface);
+  border:1px solid var(--c-border-strong); border-radius:var(--r-md);
+  transition:border-color var(--motion-fast) var(--ease); }
+.erp-textarea{ padding:var(--sp-2) var(--sp-3); min-height:72px; resize:vertical; line-height:var(--lh-normal); }
+.erp-input:hover,.erp-select:hover,.erp-textarea:hover{ border-color:var(--c-text-muted); }
+.erp-input:focus,.erp-select:focus,.erp-textarea:focus{ outline:none; border-color:var(--c-primary);
+  box-shadow:0 0 0 1px var(--c-primary); }
+.erp-input:disabled,.erp-select:disabled{ background:var(--c-surface-sunken); color:var(--c-text-disabled);
+  cursor:not-allowed; }
+.erp-input[readonly]{ background:var(--c-surface-alt); }
+.erp-field__hint{ font-size:var(--fs-11); color:var(--c-text-muted); }
+.erp-field--error .erp-input,.erp-field--error .erp-select{ border-color:var(--c-error);
+  box-shadow:0 0 0 1px var(--c-error); }
+.erp-field__error{ font-size:var(--fs-11); color:var(--c-error); font-weight:var(--fw-medium); }
+.erp-check{ display:inline-flex; align-items:center; gap:var(--sp-2); font-size:var(--fs-13); cursor:pointer; }
+.erp-form__actions{ display:flex; gap:var(--sp-2); justify-content:flex-end; padding-top:var(--sp-4);
+  border-top:1px solid var(--c-border); margin-top:var(--sp-2); }
+
+/* =====================================================================
+   8. DASHBOARDS (KPI tiles + card grid)
+   ===================================================================== */
+.erp-dash-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:var(--sp-4); }
+.erp-kpi{ background:var(--c-surface); border:1px solid var(--c-border); border-radius:var(--r-md);
+  box-shadow:var(--shadow-card); padding:var(--sp-4); }
+.erp-kpi__label{ font-size:var(--fs-12); color:var(--c-text-muted); font-weight:var(--fw-medium); }
+.erp-kpi__value{ font-size:var(--fs-24); font-weight:var(--fw-semibold); margin:var(--sp-1) 0;
+  font-variant-numeric:tabular-nums; }
+.erp-kpi__delta{ font-size:var(--fs-12); font-weight:var(--fw-semibold); }
+.erp-kpi__delta--up{ color:var(--c-success); } .erp-kpi__delta--down{ color:var(--c-error); }
+.erp-kpi--accent{ border-top:3px solid var(--c-primary); }
+.erp-panel{ background:var(--c-surface); border:1px solid var(--c-border); border-radius:var(--r-md);
+  box-shadow:var(--shadow-card); }
+.erp-panel__head{ display:flex; align-items:center; justify-content:space-between;
+  padding:var(--sp-3); border-bottom:1px solid var(--c-border); font-weight:var(--fw-semibold);
+  font-size:var(--fs-14); }
+.erp-panel__body{ padding:var(--sp-4); }
+.erp-chart-placeholder{ height:180px; border:1px dashed var(--c-border-strong); border-radius:var(--r-sm);
+  display:grid; place-items:center; color:var(--c-text-muted); font-size:var(--fs-12);
+  background:repeating-linear-gradient(45deg,var(--c-surface-alt) 0 10px,var(--c-surface) 10px 20px); }
+
+/* =====================================================================
+   9. MODALS / DIALOGS
+   ===================================================================== */
+.erp-backdrop{ position:fixed; inset:0; background:rgba(16,24,40,.45); z-index:var(--z-backdrop); }
+.erp-modal{ position:fixed; inset:0; z-index:var(--z-modal); display:grid; place-items:center; padding:var(--sp-4); }
+.erp-modal__dialog{ width:100%; max-width:520px; background:var(--c-surface); border-radius:var(--r-md);
+  box-shadow:var(--shadow-modal); display:flex; flex-direction:column; max-height:90vh; }
+.erp-modal__dialog--lg{ max-width:800px; }
+.erp-modal__head{ display:flex; align-items:center; justify-content:space-between; gap:var(--sp-3);
+  padding:var(--sp-3) var(--sp-4); border-bottom:1px solid var(--c-border); }
+.erp-modal__title{ font-size:var(--fs-16); font-weight:var(--fw-semibold); }
+.erp-modal__close{ border:0; background:none; cursor:pointer; font-size:var(--fs-18); color:var(--c-text-muted);
+  width:28px; height:28px; border-radius:var(--r-sm); }
+.erp-modal__close:hover{ background:var(--c-surface-sunken); color:var(--c-text); }
+.erp-modal__body{ padding:var(--sp-4); overflow:auto; }
+.erp-modal__foot{ display:flex; justify-content:flex-end; gap:var(--sp-2); padding:var(--sp-3) var(--sp-4);
+  border-top:1px solid var(--c-border); }
+
+/* =====================================================================
+   10. NOTIFICATIONS (inline banners + toasts)
+   ===================================================================== */
+.erp-alert{ display:flex; gap:var(--sp-3); padding:var(--sp-3); border:1px solid; border-radius:var(--r-md);
+  font-size:var(--fs-13); border-left-width:4px; }
+.erp-alert__icon{ flex:none; font-weight:var(--fw-bold); }
+.erp-alert__body{ flex:1; } .erp-alert__title{ font-weight:var(--fw-semibold); margin-bottom:2px; }
+.erp-alert--info   { background:var(--c-info-bg);    border-color:var(--c-info-border);    color:#0c4a8a; border-left-color:var(--c-info); }
+.erp-alert--success{ background:var(--c-success-bg); border-color:var(--c-success-border); color:#0e5e30; border-left-color:var(--c-success); }
+.erp-alert--warning{ background:var(--c-warning-bg); border-color:var(--c-warning-border); color:#7a5200; border-left-color:var(--c-warning); }
+.erp-alert--error  { background:var(--c-error-bg);   border-color:var(--c-error-border);   color:#9a241d; border-left-color:var(--c-error); }
+.erp-toast-region{ position:fixed; bottom:var(--sp-4); right:var(--sp-4); z-index:var(--z-toast);
+  display:flex; flex-direction:column; gap:var(--sp-2); width:340px; }
+.erp-toast{ display:flex; gap:var(--sp-3); align-items:flex-start; background:var(--c-surface);
+  border:1px solid var(--c-border); border-left:4px solid var(--c-primary); border-radius:var(--r-md);
+  box-shadow:var(--shadow-popover); padding:var(--sp-3); font-size:var(--fs-13); }
+.erp-toast--success{ border-left-color:var(--c-success); }
+.erp-toast--error{ border-left-color:var(--c-error); }
+.erp-toast__body{ flex:1; } .erp-toast__title{ font-weight:var(--fw-semibold); }
+.erp-toast__close{ border:0; background:none; cursor:pointer; color:var(--c-text-muted); }
+
+/* =====================================================================
+   11. APPROVAL SCREENS (request header, action bar, decision timeline)
+   ===================================================================== */
+.erp-approval{ display:grid; grid-template-columns:1fr 320px; gap:var(--sp-4); align-items:start; }
+.erp-approval__main{ display:flex; flex-direction:column; gap:var(--sp-4); }
+.erp-actionbar{ position:sticky; top:0; display:flex; align-items:center; gap:var(--sp-2);
+  background:var(--c-surface); border:1px solid var(--c-border); border-radius:var(--r-md);
+  box-shadow:var(--shadow-card); padding:var(--sp-2) var(--sp-3); }
+.erp-actionbar__meta{ display:flex; flex-direction:column; }
+.erp-actionbar__doc{ font-weight:var(--fw-semibold); font-size:var(--fs-14); }
+.erp-actionbar__sub{ font-size:var(--fs-12); color:var(--c-text-muted); }
+.erp-actionbar__spacer{ flex:1; }
+.erp-deflist{ display:grid; grid-template-columns:160px 1fr; gap:var(--sp-2) var(--sp-4); font-size:var(--fs-13); }
+.erp-deflist dt{ color:var(--c-text-muted); } .erp-deflist dd{ margin:0; font-weight:var(--fw-medium); }
+.erp-timeline{ list-style:none; margin:0; padding:0; }
+.erp-timeline__item{ position:relative; padding:0 0 var(--sp-4) var(--sp-5); }
+.erp-timeline__item::before{ content:""; position:absolute; left:7px; top:16px; bottom:0; width:2px; background:var(--c-border); }
+.erp-timeline__item:last-child::before{ display:none; }
+.erp-timeline__dot{ position:absolute; left:0; top:2px; width:16px; height:16px; border-radius:var(--r-pill);
+  background:var(--c-surface); border:2px solid var(--c-border-strong); }
+.erp-timeline__dot--approved{ border-color:var(--c-success); background:var(--c-success); }
+.erp-timeline__dot--rejected{ border-color:var(--c-error); background:var(--c-error); }
+.erp-timeline__dot--current{ border-color:var(--c-primary); }
+.erp-timeline__who{ font-weight:var(--fw-semibold); font-size:var(--fs-13); }
+.erp-timeline__meta{ font-size:var(--fs-12); color:var(--c-text-muted); }
+.erp-timeline__note{ font-size:var(--fs-12); color:var(--c-text-secondary); margin-top:2px; }
+
+/* ---- small helpers ---- */
+.erp-stack{ display:flex; flex-direction:column; gap:var(--sp-4); }
+.erp-row{ display:flex; align-items:center; gap:var(--sp-2); }
+.mt-4{ margin-top:var(--sp-4); } .mb-4{ margin-bottom:var(--sp-4); }
