@@ -39,11 +39,15 @@ function parseAllowedOrigins(): string[] {
  */
 function buildCorsOptions(): CorsOptions {
   const allowed = parseAllowedOrigins();
+  // CORS_ORIGINS='*' is a true wildcard (allow any origin). Safe here because the
+  // API uses Authorization-header auth, not cookies (credentials are off), so a
+  // wildcard ACAO cannot leak credentialed responses. Otherwise, exact allowlist.
+  const allowAll = allowed.includes('*');
   return {
     origin(requestOrigin, callback) {
       // Non-browser / same-origin requests have no Origin header — allow them
       // (CORS only governs cross-origin browser access).
-      if (!requestOrigin) {
+      if (!requestOrigin || allowAll) {
         callback(null, true);
         return;
       }
