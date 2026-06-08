@@ -11,6 +11,8 @@ export const loginSchema = z.object({
   password: z.string().min(1).max(200),
   companyId: z.coerce.number().int().positive().optional(),
   buId: z.coerce.number().int().positive().optional(),
+  /** TOTP code, required only when the account has MFA enabled. */
+  totp: z.string().regex(/^\d{6}$/).optional(),
 });
 
 export type LoginDto = z.infer<typeof loginSchema>;

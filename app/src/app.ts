@@ -27,6 +27,7 @@ import { taxRouter } from './modules/tax/tax.routes';
 import { profitabilityRouter } from './modules/profitability/profitability.routes';
 import { dashboardRouter } from './modules/dashboard/dashboard.routes';
 import { authRouter } from './modules/auth/auth.routes';
+import { mfaRouter } from './modules/auth/mfa.routes';
 import { changeRouter } from './modules/change/change.routes';
 import { qualityRouter } from './modules/quality/quality.routes';
 import { hrRouter } from './modules/hr/hr.routes';
@@ -79,6 +80,7 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
       buId: ctx.buId, permissions: [...ctx.permissions],
     });
   });
+  app.use('/api/auth', mfaRouter(pool)); // authenticated MFA enrollment
 
   app.use('/api/enquiries', enquiryRouter(pool));
   app.use('/api/quotations', quotationRouter(pool));

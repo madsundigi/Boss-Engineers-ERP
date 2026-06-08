@@ -77,5 +77,23 @@ curl -s localhost:3001/api/me -H "Authorization: Bearer $TOKEN"
 
 ## 6. Backup / DR
 
-Schedule `pg_dump` (e.g. daily) and verify restores; Render managed Postgres also
-offers point-in-time recovery on paid plans. Document your RPO/RTO targets.
+Run `DATABASE_URL=... app/scripts/backup.sh` (custom-format `pg_dump`, 14-dump
+local retention) on a cron/timer and ship dumps off-box (S3/GCS). Restore with
+`pg_restore --clean --if-exists --no-owner -d "$TARGET" <dump>`. Render managed
+Postgres also offers point-in-time recovery on paid plans. Document RPO/RTO.
+
+## 7. Non-functional hardening (NFR)
+
+- **MFA (TOTP):** enrol via `POST /api/auth/mfa/setup` → `…/enable` (scan the
+  `otpauthUrl` in any authenticator app). Once enabled, `POST /auth/login`
+  requires a `totp` code. Disable with `…/mfa/disable`.
+- **Encryption:** in transit — terminate TLS at the platform/load-balancer (Render
+  does this) and use `sslmode=require` in `DATABASE_URL`. At rest — enable the
+  managed disk/volume encryption your provider offers; for column-level secrets
+  use `pgcrypto`. Passwords are already scrypt-hashed (`app/src/common/password.ts`).
+- **Performance:** every FK is indexed and hot list paths have composite indexes;
+  smoke-test throughput with `node app/scripts/loadtest.mjs <url> <conns> <secs>`
+  (pass `AUTH_TOKEN` to hit a protected route). Targets: dashboards < 3s, posting
+  < 1s. Put reporting/dashboards on a read replica before scaling write load.
+- **i18n:** the web client routes user-facing strings through `web/src/i18n.ts`
+  (`t('key')`); add locale dictionaries there to translate.

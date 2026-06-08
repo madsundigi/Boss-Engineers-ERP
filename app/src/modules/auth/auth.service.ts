@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 import { Errors } from '../../common/http-error';
 import { verifyPassword } from '../../common/password';
+import { verifyTotp } from '../../common/totp';
 import { signAccessToken } from '../../common/jwt';
 import { LoginDto } from './auth.dto';
 
@@ -37,8 +38,10 @@ export class LoginService {
     const userRes = await this.pool.query<{
       user_id: string; username: string; full_name: string; email: string;
       password_hash: string; employee_id: string | null; is_active: boolean;
+      mfa_enabled: boolean; mfa_secret: string | null;
     }>(
-      `SELECT user_id, username, full_name, email, password_hash, employee_id, is_active
+      `SELECT user_id, username, full_name, email, password_hash, employee_id, is_active,
+              mfa_enabled, mfa_secret
          FROM sec.app_user
         WHERE username = $1 AND NOT is_deleted`,
       [dto.username],
@@ -47,6 +50,13 @@ export class LoginService {
     const u = userRes.rows[0];
     if (!u.is_active) throw invalid();
     if (!verifyPassword(dto.password, u.password_hash)) throw invalid();
+
+    // Second factor: when the account has MFA enabled, a valid TOTP is required.
+    if (u.mfa_enabled) {
+      if (!dto.totp || !u.mfa_secret || !verifyTotp(u.mfa_secret, dto.totp)) {
+        throw Errors.unauthorized('A valid MFA code is required');
+      }
+    }
 
     // Resolve the tenant: explicit companyId wins; otherwise derive it from the
     // user's linked employee. A user with neither cannot be scoped -> 400.
