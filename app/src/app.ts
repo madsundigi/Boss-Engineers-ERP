@@ -40,6 +40,9 @@ import { maintenanceRouter } from './modules/maintenance/maintenance.routes';
 import { treasuryRouter } from './modules/treasury/treasury.routes';
 import { ehsRouter } from './modules/ehs/ehs.routes';
 import { usersRouter, rolesRouter } from './modules/users/users.routes';
+import { documentRouter } from './modules/dms/dms.routes';
+import { crmRouter } from './modules/crm/crm.routes';
+import { portalRouter } from './modules/portal/portal.routes';
 import {
   invoicePostedGlHandler, paymentReceivedGlHandler, vendorInvoiceApprovedGlHandler,
 } from './modules/gl/gl.handlers';
@@ -120,6 +123,9 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
   app.use('/api/ehs', ehsRouter(pool));
   app.use('/api/users', usersRouter(pool));   // user administration (USER_MGMT)
   app.use('/api/roles', rolesRouter(pool));   // read-only role catalog (ROLE_MGMT.VIEW)
+  app.use('/api/documents', documentRouter(pool)); // DMS (versioned document repository)
+  app.use('/api/crm', crmRouter(pool));            // CRM pipeline + activities
+  app.use('/api/portal', portalRouter(pool));      // customer/vendor self-service portal
 
   // Transactional outbox relay: dispatches committed domain events (e.g. emails
   // the quotation PDF on 'quotation.sent'). Exposed for the server poller and tests.
@@ -166,6 +172,7 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
     ['project_risk.closed', ack],
     ['maintenance.completed', ack],
     ['ehs.incident.closed', ack],
+    ['opportunity.won', ack],
   ]);
   app.locals.outboxRelay = new OutboxRelay(pool, handlers);
 
