@@ -39,5 +39,6 @@ COPY --chown=node:node package.json ./
 USER node
 EXPOSE 3001
 
-# Run pending migrations (idempotent) on boot, then start the API.
-CMD ["sh", "-c", "node dist/scripts/migrate.js && node dist/src/server.js"]
+# Start the API. Migrations are applied separately as the DB owner (the bootstrap
+# step, or Render's preDeployCommand) — the runtime role intentionally lacks DDL.
+CMD ["node", "dist/src/server.js"]

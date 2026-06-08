@@ -7,7 +7,7 @@
 databases:
   - name: be-erp-db
     databaseName: boss_engineers_erp
-    plan: basic-256mb            # bump as needed
+    plan: free                   # 30-day free Postgres; upgrade for a real client
     postgresMajorVersion: "16"
 
 services:
@@ -16,9 +16,11 @@ services:
     runtime: docker
     dockerfilePath: app/Dockerfile
     dockerContext: app
-    plan: starter
+    plan: free                   # sleeps when idle; upgrade to 'starter' for always-on
     healthCheckPath: /health
-    # Run pending migrations before the new version goes live.
+    # Apply migrations before the new version goes live. migrate.js prefers
+    # MIGRATE_DATABASE_URL (the OWNER) since DDL needs ownership; the server then
+    # runs as the restricted erp_app_login in DATABASE_URL so RLS is enforced.
     preDeployCommand: node dist/scripts/migrate.js
     envVars:
       - key: NODE_ENV
@@ -26,9 +28,12 @@ services:
       - key: PORT
         value: "3001"
       - key: DATABASE_URL
-        # Use the app login role (erp_app_login) so RLS is enforced — see DEPLOY.md.
-        # Set this manually in the dashboard to the erp_app_login connection string;
-        # the fromDatabase value below is the OWNER URL, used only for one-time bootstrap.
+        # The RLS-enforced app role. After the one-time bootstrap (DEPLOY.md / §Render)
+        # creates erp_app_login, set this to that connection string in the dashboard
+        # (take the Internal Database URL and swap the user to erp_app_login).
+        sync: false
+      - key: MIGRATE_DATABASE_URL
+        # OWNER connection string — used ONLY by the preDeploy migrate (DDL).
         fromDatabase:
           name: be-erp-db
           property: connectionString

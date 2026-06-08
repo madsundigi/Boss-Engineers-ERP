@@ -42,17 +42,38 @@ postgres://erp_app_login:<ERP_APP_PW>@<host>:5432/boss_engineers_erp
 | `NODE_ENV` | yes | `production` |
 | `SMTP_URL`, `MAIL_FROM` | no | outbound mail; omit to use the in-memory outbox |
 
-## 3. Deploy on Render (blueprint)
+## 3. Deploy on Render (blueprint) — step by step
 
-`render.yaml` provisions a managed Postgres + a Docker web service.
+`render.yaml` provisions a managed Postgres (`be-erp-db`) + a Docker web service
+(`be-erp-api`). Migrations run as the DB **owner** (`MIGRATE_DATABASE_URL`); the
+server runs as the restricted **erp_app_login** (`DATABASE_URL`) so RLS is enforced.
 
-1. Push this repo; in Render: **New → Blueprint**, select the repo.
-2. Let it create `be-erp-db` and `be-erp-api`. `AUTH_JWT_SECRET` is auto-generated.
-3. **Before the first deploy succeeds**, run the §1 bootstrap once against the new
-   managed DB (use its *owner* connection string from the Render dashboard).
-4. Override the service's `DATABASE_URL` to the **erp_app_login** string from §1c.
-5. Set `CORS_ORIGINS` to your frontend / desktop origin.
-6. Redeploy. `preDeployCommand` runs migrations; health check is `GET /health`.
+1. **Create the blueprint.** Push this repo. In Render → **New → Blueprint** → pick
+   the repo. It creates `be-erp-db` and `be-erp-api`. `AUTH_JWT_SECRET` is
+   auto-generated; `DATABASE_URL` and `CORS_ORIGINS` are left blank on purpose.
+2. **Bootstrap the database (once).** From your machine, grab the DB's **External
+   Database URL** (owner) from the Render dashboard and run:
+   ```bash
+   ADMIN_DATABASE_URL='<external owner url>' \
+   ERP_APP_PW='<pick a strong password>' \
+   ADMIN_PW='<pick the admin login password>' \
+   ./app/scripts/bootstrap-prod.sh
+   ```
+   This builds the schema, migrates, creates `erp_app_login`, and sets `admin`'s password.
+3. **Set the app's DATABASE_URL.** Take the **Internal Database URL**, swap the
+   user to `erp_app_login` and the password to your `ERP_APP_PW`, and paste it into
+   the `be-erp-api` service env (`DATABASE_URL`).
+4. **Set CORS_ORIGINS** to your desktop/web origin(s) (for the Electron app you can
+   use `*` since it disables web security, or your web host URL).
+5. **Deploy.** `preDeployCommand` migrates as the owner; the server boots as
+   `erp_app_login`; health check is `GET /health`. Your API URL is
+   `https://be-erp-api.onrender.com` (or your chosen name).
+6. **Point the desktop app at it** — either type the URL on the login screen, or
+   bake it in: `VITE_API_BASE='https://be-erp-api.onrender.com' npm run build` in
+   `web/`, then rebuild the DMG (`cd desktop && npm run dist`).
+
+After future schema changes, just push — `preDeployCommand` re-runs migrations as
+the owner automatically.
 
 ## 4. Run locally with Docker
 

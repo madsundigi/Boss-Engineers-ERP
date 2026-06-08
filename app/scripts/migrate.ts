@@ -14,7 +14,11 @@ import { join } from 'path';
 const MIGRATIONS_DIR = join(__dirname, '..', 'migrations');
 
 async function main(): Promise<void> {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  // Migrations do DDL (ALTER / CREATE POLICY / GRANT) so they must run as the
+  // table OWNER, not the restricted erp_app_login the app uses at runtime.
+  // Prefer an explicit owner URL when provided (e.g. Render's MIGRATE_DATABASE_URL).
+  const connectionString = process.env.MIGRATE_DATABASE_URL ?? process.env.DATABASE_URL;
+  const pool = new Pool({ connectionString });
   try {
     await pool.query(`CREATE TABLE IF NOT EXISTS public.schema_migration (
       filename   text PRIMARY KEY,
