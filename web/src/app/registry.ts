@@ -22,6 +22,7 @@ export const SECTIONS: NavSection[] = [
     label: 'Sales & CRM',
     items: [
       { path: 'enquiries', label: 'Enquiries', endpoint: '/api/enquiries', idKey: 'enquiryId' },
+      { path: 'opportunities', label: 'Opportunities', endpoint: '/api/crm/opportunities', idKey: 'oppId' },
       { path: 'quotations', label: 'Quotations', endpoint: '/api/quotations', idKey: 'quotationId' },
       { path: 'contracts', label: 'Contracts', endpoint: '/api/contracts' },
     ],
@@ -53,6 +54,7 @@ export const SECTIONS: NavSection[] = [
       { path: 'fat', label: 'FAT', endpoint: '/api/fat' },
       { path: 'inspections', label: 'Inspections', endpoint: '/api/inspections' },
       { path: 'ncrs', label: 'NCR / CAPA', endpoint: '/api/ncrs' },
+      { path: 'documents', label: 'Documents (DMS)', endpoint: '/api/documents', idKey: 'docId' },
     ],
   },
   {
@@ -224,6 +226,21 @@ export const FORMS: Record<string, FormField[]> = {
     { name: 'revision', label: 'Revision', required: true },
     { name: 'projectId', label: 'Project ID', type: 'number' },
     { name: 'effectiveFrom', label: 'Effective From', type: 'date' },
+  ],
+  opportunities: [
+    { name: 'customerId', label: 'Customer ID', type: 'number', required: true },
+    { name: 'title', label: 'Title', required: true },
+    { name: 'enquiryId', label: 'Enquiry ID', type: 'number' },
+    { name: 'estValue', label: 'Est. Value', type: 'number' },
+    { name: 'probabilityPct', label: 'Probability %', type: 'number' },
+    { name: 'expectedCloseDate', label: 'Expected Close', type: 'date' },
+  ],
+  documents: [
+    { name: 'title', label: 'Title', required: true },
+    { name: 'category', label: 'Category', type: 'select',
+      options: ['DRAWING', 'SPEC', 'CERTIFICATE', 'CONTRACT', 'REPORT', 'MANUAL', 'OTHER'] },
+    { name: 'entityType', label: 'Linked Entity', placeholder: 'PROJECT, DISPATCH…' },
+    { name: 'entityId', label: 'Linked Entity ID', type: 'number' },
   ],
 };
 
