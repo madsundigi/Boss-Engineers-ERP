@@ -44,6 +44,9 @@ import {
   invoicePostedGlHandler, paymentReceivedGlHandler, vendorInvoiceApprovedGlHandler,
 } from './modules/gl/gl.handlers';
 import { quotationWonHandler } from './modules/project/project.handlers';
+import { fatPassedClearQualityHandler } from './modules/dispatch/dispatch.handlers';
+import { dispatchReleasedWarrantyHandler } from './modules/service/service.handlers';
+import { installationAcceptedBillingHandler } from './modules/billing/billing.handlers';
 import { EmailService, EmailTransport, buildEmailTransport } from './services/email.service';
 import { PdfService } from './services/pdf.service';
 import { OutboxRelay } from './outbox/relay';
@@ -131,16 +134,19 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
     ['quotation.won', quotationWonHandler(pool)],
     ['project.created', ack],
     ['project.approved', ack],
-    ['fat.passed', ack],
+    // FAT pass opens the linked dispatch's quality gate.
+    ['fat.passed', fatPassedClearQualityHandler(pool)],
     ['planning.baseline.approved', ack],
     ['po.approved', ack],
     ['workorder.created', ack],
     ['workorder.released', ack],
     ['workorder.completed', ack],
-    ['dispatch.released', ack],
+    // Releasing a dispatch starts warranty for each shipped serial.
+    ['dispatch.released', dispatchReleasedWarrantyHandler(pool)],
     ['service_ticket.resolved', ack],
     ['warranty_claim.approved', ack],
-    ['installation.accepted', ack],
+    // Customer acceptance (CAC) notifies Finance to raise the final invoice.
+    ['installation.accepted', installationAcceptedBillingHandler(pool)],
     ['ncr.closed', ack],
     ['delivery.at_risk', ack],
     ['bom.released', ack],
