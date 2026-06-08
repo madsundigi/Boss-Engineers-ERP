@@ -8,6 +8,8 @@ export interface ResourceDef {
   endpoint: string;   // API list endpoint (GET)
   /** explicit columns; when omitted, derived from the first row's scalar keys */
   columns?: { key: string; label: string; kind?: 'num' | 'mono' | 'status' | 'date' }[];
+  /** the row's primary-key field (e.g. 'enquiryId'); derived from the row when omitted */
+  idKey?: string;
 }
 
 export interface NavSection {
@@ -19,17 +21,17 @@ export const SECTIONS: NavSection[] = [
   {
     label: 'Sales & CRM',
     items: [
-      { path: 'enquiries', label: 'Enquiries', endpoint: '/api/enquiries' },
-      { path: 'quotations', label: 'Quotations', endpoint: '/api/quotations' },
+      { path: 'enquiries', label: 'Enquiries', endpoint: '/api/enquiries', idKey: 'enquiryId' },
+      { path: 'quotations', label: 'Quotations', endpoint: '/api/quotations', idKey: 'quotationId' },
       { path: 'contracts', label: 'Contracts', endpoint: '/api/contracts' },
     ],
   },
   {
     label: 'Projects',
     items: [
-      { path: 'projects', label: 'Projects', endpoint: '/api/projects' },
-      { path: 'change-orders', label: 'Change Orders', endpoint: '/api/change-orders' },
-      { path: 'delivery-forecasts', label: 'Delivery Forecasts', endpoint: '/api/delivery-forecasts' },
+      { path: 'projects', label: 'Projects', endpoint: '/api/projects', idKey: 'projectId' },
+      { path: 'change-orders', label: 'Change Orders', endpoint: '/api/change-orders', idKey: 'changeOrderId' },
+      { path: 'delivery-forecasts', label: 'Delivery Forecasts', endpoint: '/api/delivery-forecasts', idKey: 'forecastId' },
     ],
   },
   {
@@ -41,7 +43,7 @@ export const SECTIONS: NavSection[] = [
       { path: 'stock', label: 'Stock', endpoint: '/api/inventory/stock' },
       { path: 'critical-items', label: 'Critical Items', endpoint: '/api/inventory/critical-items' },
       { path: 'subcontracts', label: 'Subcontracts', endpoint: '/api/subcontracts' },
-      { path: 'boms', label: 'Bills of Material', endpoint: '/api/boms' },
+      { path: 'boms', label: 'Bills of Material', endpoint: '/api/boms', idKey: 'bomId' },
     ],
   },
   {
@@ -64,7 +66,7 @@ export const SECTIONS: NavSection[] = [
   {
     label: 'Finance',
     items: [
-      { path: 'invoices', label: 'Invoices (AR)', endpoint: '/api/invoices' },
+      { path: 'invoices', label: 'Invoices (AR)', endpoint: '/api/invoices', idKey: 'invoiceId' },
       { path: 'receipts', label: 'Receipts', endpoint: '/api/invoices/receipts' },
       { path: 'ap-invoices', label: 'AP Invoices', endpoint: '/api/ap-invoices' },
       { path: 'gl-journals', label: 'GL Journals', endpoint: '/api/gl/journals' },
@@ -98,6 +100,25 @@ export interface FormField {
   placeholder?: string;
 }
 
+/** One column in a repeatable line-item editor (header + N lines documents). */
+export interface LineField {
+  name: string;
+  label: string;
+  type?: 'text' | 'number' | 'select';
+  required?: boolean;
+  options?: readonly string[];
+}
+
+/** A line-item document: header fields (FORMS) + a repeatable line array. */
+export interface DocFormDef {
+  /** payload key the line rows are nested under (e.g. 'lines') */
+  lineKey: string;
+  /** columns of the repeatable line editor */
+  lineFields: LineField[];
+  /** require at least one line on submit (mirrors the backend `.min(1)`) */
+  minLines?: number;
+}
+
 const ENQUIRY_SOURCE = ['EMAIL', 'WEB', 'PHONE', 'WALKIN', 'REP', 'REFERRAL', 'EXHIBITION', 'OTHER'];
 const RISK_CATEGORY = ['SCHEDULE', 'COST', 'QUALITY', 'SUPPLY', 'SAFETY', 'COMMERCIAL', 'TECHNICAL'];
 const RISK_LEVEL = ['LOW', 'MEDIUM', 'HIGH'];
@@ -105,6 +126,7 @@ const DRIVER = ['MATERIAL', 'CAPACITY', 'SCHEDULE', 'QUALITY'];
 const EMPLOYEE_STATUS = ['ACTIVE', 'INACTIVE', 'LEFT'];
 const INCIDENT_TYPE = ['INJURY', 'NEARMISS', 'SPILL', 'FIRE', 'PROPERTY', 'OTHER'];
 const INCIDENT_SEVERITY = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+const BOM_TYPE = ['EBOM', 'MBOM']; // mirrors app bom.constants BOM_TYPE
 
 /** Create-form field configs, keyed by resource path. Fields map 1:1 to the
  *  module's create DTO; FK references are entered as numeric ids (visible in
@@ -177,8 +199,94 @@ export const FORMS: Record<string, FormField[]> = {
     { name: 'description', label: 'Description', type: 'textarea', required: true },
     { name: 'correctiveAction', label: 'Corrective Action', type: 'textarea' },
   ],
+  // ---- line-item documents (header fields; lines live in DOC_FORMS) --------
+  quotations: [
+    { name: 'customerName', label: 'Customer Name', required: true },
+    { name: 'subject', label: 'Subject' },
+    { name: 'contact', label: 'Contact Person' },
+    { name: 'email', label: 'Email' },
+    { name: 'currencyCode', label: 'Currency Code', placeholder: 'INR' },
+    { name: 'validUntil', label: 'Valid Until', type: 'date' },
+    { name: 'totalCost', label: 'Total Cost', type: 'number' },
+    { name: 'discountPct', label: 'Discount %', type: 'number' },
+    { name: 'enquiryId', label: 'Enquiry ID', type: 'number' },
+  ],
+  invoices: [
+    { name: 'customerId', label: 'Customer ID', type: 'number', required: true },
+    { name: 'projectId', label: 'Project ID', type: 'number' },
+    { name: 'milestoneId', label: 'Milestone ID', type: 'number' },
+    { name: 'currencyId', label: 'Currency ID', type: 'number' },
+    { name: 'invoiceDate', label: 'Invoice Date', type: 'date' },
+  ],
+  boms: [
+    { name: 'parentItemId', label: 'Parent Item ID', type: 'number', required: true },
+    { name: 'bomType', label: 'BOM Type', type: 'select', options: BOM_TYPE, required: true },
+    { name: 'revision', label: 'Revision', required: true },
+    { name: 'projectId', label: 'Project ID', type: 'number' },
+    { name: 'effectiveFrom', label: 'Effective From', type: 'date' },
+  ],
 };
+
+/** Line-item editor configs, keyed by resource path. Mirrors each module's
+ *  create DTO `lines` array; FK references are numeric-id inputs. */
+export const DOC_FORMS: Record<string, DocFormDef> = {
+  quotations: {
+    lineKey: 'lines',
+    minLines: 1,
+    lineFields: [
+      { name: 'description', label: 'Description', required: true },
+      { name: 'qty', label: 'Qty', type: 'number', required: true },
+      { name: 'unitPrice', label: 'Unit Price', type: 'number', required: true },
+    ],
+  },
+  invoices: {
+    lineKey: 'lines',
+    minLines: 1,
+    lineFields: [
+      { name: 'description', label: 'Description', required: true },
+      { name: 'qty', label: 'Qty', type: 'number', required: true },
+      { name: 'unitRate', label: 'Unit Rate', type: 'number', required: true },
+      { name: 'taxCodeId', label: 'Tax Code ID', type: 'number' },
+    ],
+  },
+  boms: {
+    lineKey: 'lines',
+    // backend allows a BOM to be drafted with no lines; require none here.
+    lineFields: [
+      { name: 'componentItemId', label: 'Component Item ID', type: 'number', required: true },
+      { name: 'qtyPer', label: 'Qty Per', type: 'number', required: true },
+      { name: 'uomId', label: 'UoM ID', type: 'number', required: true },
+      { name: 'scrapPct', label: 'Scrap %', type: 'number' },
+    ],
+  },
+};
+
+export function docFormFor(path: string): DocFormDef | undefined {
+  return DOC_FORMS[path];
+}
 
 export function formFor(path: string): FormField[] | undefined {
   return FORMS[path];
+}
+
+/** Foreign-key-looking id fields that must never be treated as a row's own PK. */
+function looksForeign(key: string): boolean {
+  return /^(customer|company|bu|branch|tenant|created|updated|pm|user|parent|component|uom|tax|currency|milestone|department|designation|enquiry)/i.test(key);
+}
+
+/**
+ * Resolve a row's primary key value. Prefers an explicit `def.idKey`; otherwise
+ * derives it: the path's singular-ish name + 'Id' if present, else the first key
+ * ending in 'Id' that doesn't look like a foreign key, else the first 'Id' key.
+ */
+export function idOf(row: Record<string, unknown>, def: ResourceDef): unknown {
+  if (def.idKey && row[def.idKey] != null) return row[def.idKey];
+  const keys = Object.keys(row);
+  // singular-ish guess from the path: 'quotations' -> 'quotationId'
+  const singular = def.path.replace(/-/g, '').replace(/s$/, '') + 'Id';
+  const exact = keys.find((k) => k.toLowerCase() === singular.toLowerCase());
+  if (exact) return row[exact];
+  const idKeys = keys.filter((k) => /Id$/.test(k));
+  const own = idKeys.find((k) => !looksForeign(k));
+  return row[own ?? idKeys[0] ?? ''];
 }
