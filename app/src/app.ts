@@ -39,6 +39,7 @@ import { sparesRouter } from './modules/spares/spares.routes';
 import { maintenanceRouter } from './modules/maintenance/maintenance.routes';
 import { treasuryRouter } from './modules/treasury/treasury.routes';
 import { ehsRouter } from './modules/ehs/ehs.routes';
+import { usersRouter, rolesRouter } from './modules/users/users.routes';
 import {
   invoicePostedGlHandler, paymentReceivedGlHandler, vendorInvoiceApprovedGlHandler,
 } from './modules/gl/gl.handlers';
@@ -114,6 +115,8 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
   app.use('/api/maintenance', maintenanceRouter(pool));
   app.use('/api/treasury', treasuryRouter(pool));
   app.use('/api/ehs', ehsRouter(pool));
+  app.use('/api/users', usersRouter(pool));   // user administration (USER_MGMT)
+  app.use('/api/roles', rolesRouter(pool));   // read-only role catalog (ROLE_MGMT.VIEW)
 
   // Transactional outbox relay: dispatches committed domain events (e.g. emails
   // the quotation PDF on 'quotation.sent'). Exposed for the server poller and tests.

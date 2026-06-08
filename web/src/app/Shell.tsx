@@ -34,6 +34,18 @@ export function Shell({ children }: { children: ReactNode }) {
             ))}
           </div>
         ))}
+
+        <div>
+          <div className="erp-nav__section">Administration</div>
+          <NavLink to="/users"
+            className={({ isActive }) => 'erp-nav__item' + (isActive ? ' is-active' : '')}>
+            <span className="erp-nav__icon">▷</span> Users
+          </NavLink>
+          <NavLink to="/roles"
+            className={({ isActive }) => 'erp-nav__item' + (isActive ? ' is-active' : '')}>
+            <span className="erp-nav__icon">▷</span> Roles
+          </NavLink>
+        </div>
       </nav>
 
       <main className="erp-content">

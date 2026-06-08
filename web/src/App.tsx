@@ -4,6 +4,8 @@ import { LoginPage } from './auth/LoginPage';
 import { Shell } from './app/Shell';
 import { DashboardPage } from './pages/DashboardPage';
 import { ResourcePage } from './pages/ResourcePage';
+import { UsersPage } from './pages/UsersPage';
+import { RolesPage } from './pages/RolesPage';
 
 function AppRoutes() {
   const { user } = useSession();
@@ -22,6 +24,8 @@ function AppRoutes() {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/r/:path" element={<ResourcePage />} />
+        <Route path="/users" element={<UsersPage />} />
+        <Route path="/roles" element={<RolesPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Shell>
