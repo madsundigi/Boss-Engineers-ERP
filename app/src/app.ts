@@ -34,6 +34,10 @@ import { subcontractRouter } from './modules/subcontract/subcontract.routes';
 import { contractRouter } from './modules/contract/contract.routes';
 import { notificationRouter } from './modules/notification/notification.routes';
 import { riskRouter } from './modules/risk/risk.routes';
+import { sparesRouter } from './modules/spares/spares.routes';
+import { maintenanceRouter } from './modules/maintenance/maintenance.routes';
+import { treasuryRouter } from './modules/treasury/treasury.routes';
+import { ehsRouter } from './modules/ehs/ehs.routes';
 import {
   invoicePostedGlHandler, paymentReceivedGlHandler, vendorInvoiceApprovedGlHandler,
 } from './modules/gl/gl.handlers';
@@ -104,6 +108,10 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
   app.use('/api/contracts', contractRouter(pool));
   app.use('/api/notifications', notificationRouter(pool));
   app.use('/api/risks', riskRouter(pool));
+  app.use('/api/spares', sparesRouter(pool));
+  app.use('/api/maintenance', maintenanceRouter(pool));
+  app.use('/api/treasury', treasuryRouter(pool));
+  app.use('/api/ehs', ehsRouter(pool));
 
   // Transactional outbox relay: dispatches committed domain events (e.g. emails
   // the quotation PDF on 'quotation.sent'). Exposed for the server poller and tests.
@@ -145,6 +153,8 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
     ['subcontract.received', ack],
     ['contract.activated', ack],
     ['project_risk.closed', ack],
+    ['maintenance.completed', ack],
+    ['ehs.incident.closed', ack],
   ]);
   app.locals.outboxRelay = new OutboxRelay(pool, handlers);
 
