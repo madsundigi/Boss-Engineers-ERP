@@ -32,6 +32,8 @@ import { qualityRouter } from './modules/quality/quality.routes';
 import { hrRouter } from './modules/hr/hr.routes';
 import { subcontractRouter } from './modules/subcontract/subcontract.routes';
 import { contractRouter } from './modules/contract/contract.routes';
+import { notificationRouter } from './modules/notification/notification.routes';
+import { riskRouter } from './modules/risk/risk.routes';
 import {
   invoicePostedGlHandler, paymentReceivedGlHandler, vendorInvoiceApprovedGlHandler,
 } from './modules/gl/gl.handlers';
@@ -100,6 +102,8 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
   app.use('/api/hr', hrRouter(pool));
   app.use('/api/subcontracts', subcontractRouter(pool));
   app.use('/api/contracts', contractRouter(pool));
+  app.use('/api/notifications', notificationRouter(pool));
+  app.use('/api/risks', riskRouter(pool));
 
   // Transactional outbox relay: dispatches committed domain events (e.g. emails
   // the quotation PDF on 'quotation.sent'). Exposed for the server poller and tests.
@@ -140,6 +144,7 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
     ['leave.approved', ack],
     ['subcontract.received', ack],
     ['contract.activated', ack],
+    ['project_risk.closed', ack],
   ]);
   app.locals.outboxRelay = new OutboxRelay(pool, handlers);
 
