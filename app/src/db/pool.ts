@@ -24,7 +24,17 @@ export interface Queryable {
 const APP_DB_ROLE = 'erp_app';
 
 export function createPool(): Pool {
-  return new Pool({ connectionString: env.databaseUrl, max: 10 });
+  const url = env.databaseUrl;
+  // Managed Postgres (Render/Neon/etc.) requires TLS. Force it for any non-local
+  // host or when the URL asks for it; rejectUnauthorized:false accepts the
+  // provider's cert (the connection is still encrypted). Local dev/test is plain.
+  const isLocal = /@(localhost|127\.0\.0\.1)[:/]/.test(url);
+  const wantsSsl = /sslmode=(require|verify|prefer)/.test(url) || (!isLocal && !env.isTest);
+  return new Pool({
+    connectionString: url,
+    max: 10,
+    ...(wantsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+  });
 }
 
 /** Drop to the RLS-enforced role and push the request identity into session GUCs
