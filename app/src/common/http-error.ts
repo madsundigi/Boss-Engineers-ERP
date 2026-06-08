@@ -22,4 +22,6 @@ export const Errors = {
     new AppError(404, 'NOT_FOUND', msg),
   conflict: (msg: string, details?: unknown) =>
     new AppError(409, 'CONFLICT', msg, details),
+  badGateway: (msg: string, details?: unknown) =>
+    new AppError(502, 'BAD_GATEWAY', msg, details),
 };

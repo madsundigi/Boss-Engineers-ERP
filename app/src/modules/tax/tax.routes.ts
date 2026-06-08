@@ -7,6 +7,7 @@ import { TaxRepository } from './tax.repository';
 import { TaxService } from './tax.service';
 import { TaxController } from './tax.controller';
 import { TAX_PERMS } from './tax.constants';
+import { getEInvoiceProvider } from '../../services/einvoice';
 import {
   createTaxCodeSchema, setActiveSchema, taxCodeQuerySchema, generateEInvoiceSchema,
   generateEwayBillSchema, txnQuerySchema, summaryQuerySchema,
@@ -19,7 +20,10 @@ import {
  * routes so they are not captured as an :id.
  */
 export function taxRouter(pool: Pool): Router {
-  const controller = new TaxController(new TaxService(new TaxRepository(pool)));
+  // Choose the e-invoice/e-way provider once at composition time (mock by
+  // default; the live NIC IRP when EINVOICE_PROVIDER=nic and creds are present).
+  const einvoice = getEInvoiceProvider(pool);
+  const controller = new TaxController(new TaxService(new TaxRepository(pool), einvoice));
   const r = Router();
   const P = TAX_PERMS;
 

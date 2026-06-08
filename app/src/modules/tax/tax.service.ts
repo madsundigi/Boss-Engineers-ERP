@@ -1,11 +1,12 @@
-import { createHash } from 'node:crypto';
 import { Errors } from '../../common/http-error';
 import { RequestContext } from '../../common/request-context';
 import { OutboxEventInput } from '../../outbox/outbox';
+import { EInvoiceProvider } from '../../services/einvoice/provider';
+import { MockEInvoiceProvider } from '../../services/einvoice/mock.provider';
 import { TaxRepository, TaxCodeInput } from './tax.repository';
 import {
   TaxCode, TaxTransaction, TaxTransactionListResult, GstSplit, GstSummary, EInvoiceResult,
-  EwayBillResult, InvoiceForTax,
+  EwayBillResult,
 } from './tax.types';
 import {
   CreateTaxCodeDto, TaxCodeQueryDto, GenerateEInvoiceDto, GenerateEwayBillDto,
@@ -39,7 +40,21 @@ export function splitGst(taxAmount: number, supplyType: SupplyType): GstSplit {
  * Billing module owns its lifecycle.
  */
 export class TaxService {
-  constructor(private readonly repo: TaxRepository) {}
+  private readonly einvoice: EInvoiceProvider;
+
+  /**
+   * @param repo      tax repository (DB writes + invoice read/stamp).
+   * @param einvoice  e-invoice / e-way provider that produces the IRN / EWB
+   *                  artefacts. Defaults to the deterministic mock provider so
+   *                  existing behaviour (and unit tests) are unchanged unless a
+   *                  live NIC provider is injected by the composition root.
+   */
+  constructor(
+    private readonly repo: TaxRepository,
+    einvoice?: EInvoiceProvider,
+  ) {
+    this.einvoice = einvoice ?? new MockEInvoiceProvider();
+  }
 
   // ---------------------------------------------------------------------
   // Tax-code master.
@@ -100,8 +115,11 @@ export class TaxService {
     }
 
     const split = splitGst(inv.taxAmount, dto.supplyType);
-    const irn = mockIrn(inv);
-    const ackNo = mockAckNo(inv.invoiceId);
+    // Produce the IRN / ack via the configured provider (mock by default, or the
+    // live NIC IRP when configured). The provider only mints the artefacts; the
+    // repository still performs every DB write below, atomically.
+    const result = await this.einvoice.generateIrn(inv, split);
+    const { irn, ackNo } = result;
     const event: OutboxEventInput = {
       eventType: EINVOICE_GENERATED_EVENT,
       aggregateType: TAX_DOC_TYPE_INVOICE,
@@ -132,7 +150,7 @@ export class TaxService {
    * 'eway_bill.generated' (transactional outbox).
    */
   async generateEwayBill(
-    ctx: RequestContext, invoiceId: number, _dto: GenerateEwayBillDto,
+    ctx: RequestContext, invoiceId: number, dto: GenerateEwayBillDto,
   ): Promise<EwayBillResult> {
     const inv = await this.repo.findInvoice(ctx, invoiceId);
     if (!inv) throw Errors.notFound(`Invoice ${invoiceId} not found`);
@@ -143,7 +161,15 @@ export class TaxService {
       throw Errors.conflict(`Invoice ${inv.invoiceNo} already has an e-way bill`, { ewayBillNo: inv.ewayBillNo });
     }
 
-    const ewayBillNo = mockEwayBillNo(inv);
+    // The provider mints the EWB number (mock by default, or NIC by IRN when
+    // configured); the repository then stamps it on fin.invoice + emits the event.
+    const eway = await this.einvoice.generateEwayBill(inv, {
+      transporterId: dto.transporterId,
+      vehicleNo: dto.vehicleNo,
+      mode: dto.transportMode,
+      distanceKm: dto.distanceKm,
+    });
+    const ewayBillNo = eway.ewbNo;
     const event: OutboxEventInput = {
       eventType: EWAY_BILL_GENERATED_EVENT,
       aggregateType: TAX_DOC_TYPE_INVOICE,
@@ -182,33 +208,4 @@ export class TaxService {
     ].map(esc).join(','));
     return [head.join(','), ...lines].join('\n');
   }
-}
-
-/**
- * Deterministic MOCK IRN: the real GST IRP returns a 64-char hex hash of the
- * signed invoice. We emulate that surface with a sha256 of a stable invoice key
- * so the same invoice always yields the same 64-hex IRN (idempotent + testable),
- * without calling an external IRP.
- */
-function mockIrn(inv: InvoiceForTax): string {
-  return createHash('sha256')
-    .update(`${inv.companyId}|${inv.invoiceNo}|${inv.totalAmount}`)
-    .digest('hex'); // 64 hex chars
-}
-
-/** Mock acknowledgement number: 'ACK' + zero-padded invoice id (e.g. ACK0000000042). */
-function mockAckNo(invoiceId: number): string {
-  return `ACK${String(invoiceId).padStart(10, '0')}`;
-}
-
-/**
- * Mock 12-digit e-way bill number. The real EWB API issues a 12-digit number;
- * derive a stable 12 digits from the invoice's IRN/id so it is deterministic.
- */
-function mockEwayBillNo(inv: InvoiceForTax): string {
-  const digits = createHash('sha256')
-    .update(`EWB|${inv.companyId}|${inv.invoiceNo}|${inv.irn ?? ''}`)
-    .digest('hex')
-    .replace(/\D/g, ''); // keep only decimal digits from the hex
-  return (digits + '000000000000').slice(0, 12);
 }

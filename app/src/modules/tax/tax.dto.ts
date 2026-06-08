@@ -42,12 +42,18 @@ export type GenerateEInvoiceDto = z.infer<typeof generateEInvoiceSchema>;
 
 /**
  * POST /api/tax/invoices/:invoiceId/ewaybill — generate the e-way bill number.
- * The invoice must already carry an IRN (e-invoice first). transporter / vehicle
- * are optional carrier details captured for the consignment.
+ * The invoice must already carry an IRN (e-invoice first). All carrier details
+ * are optional. `transporter` is kept for backward compatibility; the new
+ * `transporterId` (NIC transporter GSTIN/TransId), `transportMode` and
+ * `distanceKm` feed the live NIC e-way-bill request when that provider is active
+ * (the mock ignores them).
  */
 export const generateEwayBillSchema = z.object({
   transporter: t(120).optional(),
+  transporterId: t(20).optional(),
   vehicleNo: t(20).optional(),
+  transportMode: z.enum(['road', 'rail', 'air', 'ship']).optional(),
+  distanceKm: z.coerce.number().min(0).max(4000).optional(),
 });
 export type GenerateEwayBillDto = z.infer<typeof generateEwayBillSchema>;
 
