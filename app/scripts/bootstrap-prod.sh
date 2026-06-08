@@ -27,6 +27,21 @@ psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -v erp_app_pw="$ERP_APP_PW" -f "$R
 echo "4/4  Setting the admin password…"
 ( cd "$ROOT/app" && DATABASE_URL="$ADMIN_DATABASE_URL" npm run --silent set-password admin "$ADMIN_PW" )
 
+echo "5/5  Granting the admin user the ADMIN role with full permissions…"
+psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -q <<'SQL'
+-- The base seed creates the 'admin' login but does not assign it a role. Link it
+-- to ADMIN and make ADMIN a full superuser so the first admin can set everything
+-- up (create users, assign roles). Idempotent.
+INSERT INTO sec.user_role (user_id, role_id)
+SELECT u.user_id, r.role_id FROM sec.app_user u CROSS JOIN sec.role r
+WHERE u.username = 'admin' AND r.role_code = 'ADMIN'
+ON CONFLICT DO NOTHING;
+INSERT INTO sec.role_permission (role_id, permission_id)
+SELECT r.role_id, p.permission_id FROM sec.role r CROSS JOIN sec.permission p
+WHERE r.role_code = 'ADMIN'
+ON CONFLICT DO NOTHING;
+SQL
+
 cat <<DONE
 
 Bootstrap complete. Configure the API service with:
