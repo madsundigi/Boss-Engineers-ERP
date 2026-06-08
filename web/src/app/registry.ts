@@ -87,3 +87,98 @@ export const RESOURCES: ResourceDef[] = SECTIONS.flatMap((s) => s.items);
 export function findResource(path: string): ResourceDef | undefined {
   return RESOURCES.find((r) => r.path === path);
 }
+
+// ---- Create forms ---------------------------------------------------------
+export interface FormField {
+  name: string;
+  label: string;
+  type?: 'text' | 'textarea' | 'number' | 'date' | 'select';
+  required?: boolean;
+  options?: readonly string[];
+  placeholder?: string;
+}
+
+const ENQUIRY_SOURCE = ['EMAIL', 'WEB', 'PHONE', 'WALKIN', 'REP', 'REFERRAL', 'EXHIBITION', 'OTHER'];
+const RISK_CATEGORY = ['SCHEDULE', 'COST', 'QUALITY', 'SUPPLY', 'SAFETY', 'COMMERCIAL', 'TECHNICAL'];
+const RISK_LEVEL = ['LOW', 'MEDIUM', 'HIGH'];
+const DRIVER = ['MATERIAL', 'CAPACITY', 'SCHEDULE', 'QUALITY'];
+const EMPLOYEE_STATUS = ['ACTIVE', 'INACTIVE', 'LEFT'];
+const INCIDENT_TYPE = ['INJURY', 'NEARMISS', 'SPILL', 'FIRE', 'PROPERTY', 'OTHER'];
+const INCIDENT_SEVERITY = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+
+/** Create-form field configs, keyed by resource path. Fields map 1:1 to the
+ *  module's create DTO; FK references are entered as numeric ids (visible in
+ *  their own list screens). Modules without an entry are list/view-only. */
+export const FORMS: Record<string, FormField[]> = {
+  enquiries: [
+    { name: 'customerName', label: 'Customer Name', required: true },
+    { name: 'contact', label: 'Contact Person' },
+    { name: 'email', label: 'Email' },
+    { name: 'industry', label: 'Industry' },
+    { name: 'source', label: 'Source', type: 'select', options: ENQUIRY_SOURCE },
+    { name: 'requirement', label: 'Requirement', type: 'textarea' },
+    { name: 'address', label: 'Address', type: 'textarea' },
+  ],
+  projects: [
+    { name: 'projectName', label: 'Project Name', required: true },
+    { name: 'customerId', label: 'Customer ID', type: 'number', required: true },
+    { name: 'pmUserId', label: 'PM User ID', type: 'number', required: true },
+    { name: 'contractValue', label: 'Contract Value', type: 'number' },
+    { name: 'budgetCost', label: 'Budget Cost', type: 'number' },
+    { name: 'plannedStart', label: 'Planned Start', type: 'date' },
+    { name: 'plannedEnd', label: 'Planned End', type: 'date' },
+  ],
+  'change-orders': [
+    { name: 'projectId', label: 'Project ID', type: 'number', required: true },
+    { name: 'description', label: 'Description', type: 'textarea', required: true },
+    { name: 'reason', label: 'Reason', type: 'textarea' },
+    { name: 'costImpact', label: 'Cost Impact', type: 'number' },
+    { name: 'priceImpact', label: 'Price Impact', type: 'number' },
+    { name: 'scheduleImpactDays', label: 'Schedule Impact (days)', type: 'number' },
+  ],
+  'delivery-forecasts': [
+    { name: 'projectId', label: 'Project ID', type: 'number', required: true },
+    { name: 'predictedDelivery', label: 'Predicted Delivery', type: 'date', required: true },
+    { name: 'committedDelivery', label: 'Committed Delivery', type: 'date' },
+    { name: 'riskLevel', label: 'Risk Level', type: 'select', options: RISK_LEVEL },
+    { name: 'driver', label: 'Driver', type: 'select', options: DRIVER },
+  ],
+  risks: [
+    { name: 'projectId', label: 'Project ID', type: 'number', required: true },
+    { name: 'title', label: 'Title', required: true },
+    { name: 'category', label: 'Category', type: 'select', options: RISK_CATEGORY },
+    { name: 'likelihood', label: 'Likelihood (1-5)', type: 'number', required: true },
+    { name: 'impact', label: 'Impact (1-5)', type: 'number', required: true },
+    { name: 'mitigation', label: 'Mitigation', type: 'textarea' },
+    { name: 'dueDate', label: 'Due Date', type: 'date' },
+  ],
+  employees: [
+    { name: 'empCode', label: 'Employee Code', required: true },
+    { name: 'fullName', label: 'Full Name', required: true },
+    { name: 'departmentId', label: 'Department ID', type: 'number' },
+    { name: 'designationId', label: 'Designation ID', type: 'number' },
+    { name: 'costRate', label: 'Cost Rate', type: 'number' },
+    { name: 'billingRate', label: 'Billing Rate', type: 'number' },
+    { name: 'doj', label: 'Date of Joining', type: 'date' },
+    { name: 'status', label: 'Status', type: 'select', options: EMPLOYEE_STATUS },
+  ],
+  spares: [
+    { name: 'partCode', label: 'Part Code', required: true },
+    { name: 'partName', label: 'Part Name', required: true },
+    { name: 'uom', label: 'UoM' },
+    { name: 'unitPrice', label: 'Unit Price', type: 'number' },
+    { name: 'reorderLevel', label: 'Reorder Level', type: 'number' },
+  ],
+  ehs: [
+    { name: 'incidentType', label: 'Incident Type', type: 'select', options: INCIDENT_TYPE, required: true },
+    { name: 'severity', label: 'Severity', type: 'select', options: INCIDENT_SEVERITY },
+    { name: 'location', label: 'Location' },
+    { name: 'projectId', label: 'Project ID', type: 'number' },
+    { name: 'description', label: 'Description', type: 'textarea', required: true },
+    { name: 'correctiveAction', label: 'Corrective Action', type: 'textarea' },
+  ],
+};
+
+export function formFor(path: string): FormField[] | undefined {
+  return FORMS[path];
+}

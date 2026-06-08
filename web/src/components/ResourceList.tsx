@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
-import { ResourceDef } from '../app/registry';
+import { ResourceDef, formFor } from '../app/registry';
+import { ResourceForm } from './ResourceForm';
 
 type Row = Record<string, unknown>;
 
@@ -51,6 +52,9 @@ export function ResourceList({ def }: { def: ResourceDef }) {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
+  const [reload, setReload] = useState(0);
+  const [showForm, setShowForm] = useState(false);
+  const form = formFor(def.path);
 
   useEffect(() => {
     let live = true;
@@ -61,7 +65,7 @@ export function ResourceList({ def }: { def: ResourceDef }) {
       .catch((e: ApiError) => { if (live) setError(e); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [def.endpoint]);
+  }, [def.endpoint, reload]);
 
   const columns = (def.columns && def.columns.length ? def.columns : deriveColumns(rows)) ?? [];
 
@@ -69,7 +73,22 @@ export function ResourceList({ def }: { def: ResourceDef }) {
     <div className="erp-page erp-stack">
       <div className="erp-page__head">
         <h1 className="erp-page__title">{def.label}</h1>
+        {form && (
+          <button className="erp-btn erp-btn--primary" onClick={() => setShowForm(true)}>
+            + New
+          </button>
+        )}
       </div>
+
+      {showForm && form && (
+        <ResourceForm
+          title={def.label}
+          endpoint={def.endpoint}
+          fields={form}
+          onClose={() => setShowForm(false)}
+          onCreated={() => { setShowForm(false); setReload((n) => n + 1); }}
+        />
+      )}
 
       {error && (
         <div className={`erp-alert ${error.status === 403 ? 'erp-alert--warning' : 'erp-alert--error'}`} role="alert">

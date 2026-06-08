@@ -7,6 +7,7 @@ export function LoginPage() {
   const [username, setUsername] = useState('admin_user');
   const [password, setPassword] = useState('');
   const [companyId, setCompanyId] = useState('1');
+  const [buId, setBuId] = useState('1');
   const [base, setBase] = useState(apiBase());
   const [editBase, setEditBase] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -18,7 +19,9 @@ export function LoginPage() {
     setError(null);
     setApiBase(base);
     try {
-      await login(username, password, companyId ? Number(companyId) : undefined);
+      await login(username, password,
+        companyId ? Number(companyId) : undefined,
+        buId ? Number(buId) : undefined);
     } catch (err) {
       const a = err as ApiError;
       setError(a.message || 'Login failed');
@@ -49,6 +52,11 @@ export function LoginPage() {
           <label className="erp-label" htmlFor="c">Company ID</label>
           <input id="c" className="erp-input" value={companyId}
             onChange={(e) => setCompanyId(e.target.value)} />
+        </div>
+        <div className="erp-field">
+          <label className="erp-label" htmlFor="bu">Branch (BU) ID</label>
+          <input id="bu" className="erp-input" value={buId}
+            onChange={(e) => setBuId(e.target.value)} />
         </div>
 
         <button className="erp-btn erp-btn--primary" type="submit" disabled={busy}>
