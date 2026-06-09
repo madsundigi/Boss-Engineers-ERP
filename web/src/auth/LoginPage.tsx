@@ -4,7 +4,7 @@ import { apiBase, setApiBase, ApiError } from '../api/client';
 
 export function LoginPage() {
   const { login } = useSession();
-  const [username, setUsername] = useState('admin_user');
+  const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [companyId, setCompanyId] = useState('1');
   const [buId, setBuId] = useState('1');
