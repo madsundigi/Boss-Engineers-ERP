@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Boss Engineers ERP — Client Workflow</title>
+<style>
+  @page { size: A4 portrait; margin: 14mm 14mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         color: #1a2230; margin: 0; font-size: 11px; line-height: 1.45; }
+  .cover { text-align: center; padding-top: 4mm; }
+  .brand { font-size: 13px; letter-spacing: .14em; color: #1565c0; font-weight: 700; text-transform: uppercase; }
+  h1 { font-size: 24px; margin: 6px 0 2px; }
+  .sub { color: #5a6675; font-size: 12px; margin: 0 0 10px; }
+  .example { display: inline-block; background: #eef4ff; border: 1px solid #c7dbff;
+             border-radius: 8px; padding: 8px 14px; color: #1b3b73; font-size: 11.5px; margin-bottom: 10px; }
+  .flow { text-align: center; }
+  .flow img { max-width: 100%; max-height: 232mm; }
+  .page-break { page-break-before: always; }
+  h2 { font-size: 15px; margin: 0 0 8px; padding-bottom: 4px; border-bottom: 2px solid #1565c0; color: #14233a; }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 12px; }
+  th, td { border: 1px solid #d8dee8; padding: 5px 7px; text-align: left; vertical-align: top; }
+  th { background: #14233a; color: #fff; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+  td:first-child { text-align: center; font-weight: 700; color: #1565c0; width: 18px; }
+  tr:nth-child(even) td { background: #f6f8fb; }
+  .stage { font-weight: 700; white-space: nowrap; }
+  .zap { color: #c0392b; font-weight: 700; }
+  .notes { background: #f6f8fb; border: 1px solid #e1e7ef; border-radius: 8px; padding: 10px 14px; }
+  .notes li { margin: 5px 0; }
+  .legend { color: #5a6675; font-size: 10px; margin: 6px 0 0; }
+  .foot { position: fixed; bottom: 6mm; left: 14mm; right: 14mm; color: #9aa6b6;
+          font-size: 9px; display: flex; justify-content: space-between; border-top: 1px solid #e1e7ef; padding-top: 3px; }
+  code { background: #eef1f6; padding: 0 3px; border-radius: 3px; font-size: 10px; }
+</style>
+</head>
+<body>
+
+  <section class="cover">
+    <div class="brand">Boss Engineers</div>
+    <h1>ERP — End-to-End Client Workflow</h1>
+    <p class="sub">From first enquiry to final profitability — one order through the system</p>
+    <div class="example">
+      <b>Worked example:</b> Mahindra &amp; Mahindra orders one <b>Medium-Frequency Vertical Scanner</b>
+      to <b>harden tractor axle shafts</b> (Automotive).
+    </div>
+  </section>
+
+  <section class="flow">
+    <img src="client-workflow.png" alt="End-to-end workflow flowchart">
+    <p class="legend">Thick arrows = stage hand-offs &nbsp;·&nbsp; <span class="zap">⚡</span> = automatic trigger (no re-keying)
+      &nbsp;·&nbsp; dotted = side-effect (warranty / notification / risk) &nbsp;·&nbsp; 🟢🟡🔴 = live delivery risk</p>
+  </section>
+
+  <section class="page-break">
+    <h2>The same journey, step by step</h2>
+    <table>
+      <thead><tr><th>#</th><th>Stage</th><th>Who</th><th>Screen / API</th><th>What is entered</th><th>What the system does</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td class="stage">Enquiry</td><td>Sales Exec</td><td>Enquiries → New</td><td>Customer <i>Mahindra</i>, Machine <i>Vertical Scanner</i>, Application <i>Hardening</i>, Industry <i>Automotive</i>, Qty 1, Budget ₹38 L</td><td>Generates <code>ENQ/…</code>, status <b>NEW</b></td></tr>
+        <tr><td>2</td><td class="stage">Quotation</td><td>Sales</td><td>Quotations → New</td><td>Line: <i>MF Vertical Scanner 100 kW</i> + tooling; Tax 18% GST; Payment 30/60/10; Warranty 12 mo from commissioning</td><td><code>QTN/…</code>; on Send <span class="zap">⚡</span> emails PDF; on <b>WON</b> <span class="zap">⚡</span> <code>quotation.won</code></td></tr>
+        <tr><td>3</td><td class="stage">Project</td><td><i>automatic</i></td><td>Projects</td><td>—</td><td><span class="zap">⚡</span> <b>Auto-creates</b> <code>PRJ/…</code> with contract value &amp; PM, linked to the quotation</td></tr>
+        <tr><td>4</td><td class="stage">Planning</td><td>Project Manager</td><td>Planning</td><td>WBS (design→fab→assembly→test), milestones, task dependencies, resource % complete</td><td>Gantt + baseline; feeds Workload &amp; Delivery Risk</td></tr>
+        <tr><td>5</td><td class="stage">Procurement</td><td>Purchase</td><td>PR → PO → GRN</td><td>PR for copper coil, SCR/IGBT stack, transformer; PO to supplier; GRN on arrival</td><td>On <b>GRN</b> <span class="zap">⚡</span> <b>posts a stock movement</b></td></tr>
+        <tr><td>6</td><td class="stage">Inventory</td><td>Stores</td><td>Stock · Critical Items</td><td>—</td><td>On-hand updated; below Min/Reorder flags a <b>Critical Item</b> on the dashboard</td></tr>
+        <tr><td>7</td><td class="stage">Production</td><td>Production</td><td>Work Orders</td><td>Daily confirmations, <b>progress %</b>, any <b>delay reason</b></td><td>WIP tracked; late WOs push Delivery Risk to 🟡/🔴</td></tr>
+        <tr><td>8</td><td class="stage">FAT</td><td>QC Engineer</td><td>FAT</td><td>Protocol checklist, witnessing engineer, <b>PASS</b></td><td>On <b>PASS</b> <span class="zap">⚡</span> <code>fat.passed</code> <b>opens the dispatch gate</b></td></tr>
+        <tr><td>9</td><td class="stage">Dispatch</td><td>Logistics</td><td>Dispatch</td><td>LR number, packing list, <b>serial numbers</b></td><td>On <b>RELEASE</b> <span class="zap">⚡</span> <b>starts warranty per serial</b> + <b>notifies the customer portal</b></td></tr>
+        <tr><td>10</td><td class="stage">Installation</td><td>Service Engineer</td><td>Installations</td><td>Site engineer, punch-list, <b>progress %</b>, Customer Acceptance Cert (CAC)</td><td>On <b>ACCEPTED</b> <span class="zap">⚡</span> <b>notifies Finance to raise final billing</b></td></tr>
+        <tr><td>11</td><td class="stage">Billing</td><td>Finance</td><td>Invoices</td><td>Milestone invoice, GST <b>e-invoice / e-way bill</b></td><td>On post <span class="zap">⚡</span> <b>auto-posts a balanced GL journal</b>; payments <span class="zap">⚡</span> GL too</td></tr>
+        <tr><td>12</td><td class="stage">Service</td><td>Service</td><td>Service Tickets</td><td>Complaint, field visits, spares, resolution</td><td>Computes <b>MTTR / First-Time-Fix / CSAT / service cost</b></td></tr>
+        <tr><td>13</td><td class="stage">Failure</td><td>QC</td><td>NCR / CAPA</td><td>Failure mode, root cause, <b>cost impact</b></td><td><b>Pareto</b> of failures by frequency + cost</td></tr>
+        <tr><td>14</td><td class="stage">Profitability</td><td>Finance / CEO</td><td>Profitability</td><td>—</td><td>Revenue <b>vs cost by category</b> (Material/Labour/Freight/Installation/Warranty) → <b>Margin %</b></td></tr>
+        <tr><td>15</td><td class="stage">Dashboard</td><td>CEO / Mgmt</td><td>Dashboard</td><td>—</td><td>Live KPIs: Revenue, Avg Margin, <b>FAT Pass Rate</b>, Production Efficiency, Delivery-at-Risk, Open Tickets, Order Book</td></tr>
+      </tbody>
+    </table>
+
+    <h2>What makes it a system — not 16 separate screens</h2>
+    <div class="notes">
+      <ul>
+        <li><b>5 automatic hand-offs</b> remove re-keying and enforce the lifecycle:
+          <code>quotation.won → Project</code> · <code>fat.passed → Dispatch gate</code> ·
+          <code>dispatch.released → Warranty + Customer notice</code> ·
+          <code>installation.accepted → Finance</code> · <code>invoice/payment → General Ledger</code>.</li>
+        <li><b>Live Delivery Risk</b> (🟢🟡🔴) is computed on demand from real overdue POs, delayed work orders, and pending/failed FATs — never hand-entered.</li>
+        <li><b>Central Search</b> ties the journey together: type the customer name or any document number (Enquiry / Quote / Project / <b>Machine Serial No</b> / Service Ticket) to jump across every stage of that one order.</li>
+        <li><b>Least-privilege roles</b> gate every step (Sales, Purchase, Stores, Production, QC, Logistics, Service, Finance, CEO) — deny-by-default, with a full append-only audit trail and per-company data isolation.</li>
+      </ul>
+    </div>
+  </section>
+
+  <div class="foot"><span>Boss Engineers ERP — Client Workflow</span><span>Induction Heating &amp; Hardening Systems · Ludhiana</span></div>
+</body>
+</html>

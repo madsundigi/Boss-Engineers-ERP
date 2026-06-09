@@ -1,0 +1,81 @@
+flowchart TD
+  Start(["🚀 Customer / Lead<br/>mdm.customer"]) --> ENQ
+
+  subgraph S1["1 · SALES & CRM"]
+    direction TB
+    ENQ["Enquiry (M1)<br/>Machine Type · Application · Industry<br/>Qty · Budget · Follow-up<br/><i>/api/enquiries</i>"]
+    QUO["Quotation (M2)<br/>Line items · Tax %<br/>Payment / Delivery / Warranty Terms<br/><i>/api/quotations</i>"]
+    ENQ -->|qualify| QUO
+  end
+
+  QUO ==>|"status = WON&nbsp;&nbsp;⚡ quotation.won"| PRJ
+
+  subgraph S2["2 · PROJECT & PLANNING"]
+    direction TB
+    PRJ["Project — auto-created (M3)<br/>Contract value · PM · Dates<br/><i>proj.project</i>"]
+    PLN["Planning &amp; Gantt (M4)<br/>WBS · Tasks · Milestones<br/>Dependencies · Resources · Progress %<br/><i>/api/planning</i>"]
+    PRJ --> PLN
+  end
+
+  PLN --> PROC
+  PLN --> WO
+
+  subgraph S3["3 · SUPPLY CHAIN"]
+    direction TB
+    PROC["Procurement (M5)<br/>PR → PO → GRN<br/>Supplier · Material · Delivery date<br/><i>/api/procurement</i>"]
+    INV["Inventory (M6)<br/>Stock ledger · Min/Reorder<br/>Critical items<br/><i>scm.stock_transaction</i>"]
+    PROC ==>|"GRN&nbsp;&nbsp;⚡ posts stock"| INV
+  end
+
+  INV --> WO
+
+  subgraph S4["4 · PRODUCTION & QUALITY"]
+    direction TB
+    WO["Work Orders (M8)<br/>Daily confirmations · Progress %<br/>Delay reasons<br/><i>/api/work-orders</i>"]
+    FAT["FAT (M10)<br/>Protocol checklist · Engineer<br/>PASS / FAIL<br/><i>/api/fat</i>"]
+    WO --> FAT
+  end
+
+  FAT ==>|"PASS&nbsp;&nbsp;⚡ fat.passed → opens dispatch gate"| DSP
+
+  subgraph S5["5 · LOGISTICS & SERVICE"]
+    direction TB
+    DSP["Dispatch (M11)<br/>LR No · Packing list · Serial Nos<br/><i>/api/dispatch</i>"]
+    INST["Installation &amp; Commissioning (M12)<br/>Site engineer · Punch list<br/>Progress % · Handover (CAC)<br/><i>/api/installations</i>"]
+    SVC["Warranty &amp; Service (M13)<br/>Tickets · MTTR / FTF / CSAT<br/>Spares · Service cost"]
+    PORTAL[("Customer Portal<br/>self-service")]
+    DSP --> INST
+    DSP -.->|"⚡ dispatch.released<br/>warranty per serial"| SVC
+    DSP -.->|"⚡ notify customer"| PORTAL
+  end
+
+  INST ==>|"ACCEPTED / CAC&nbsp;&nbsp;⚡ installation.accepted → notify Finance"| BILL
+
+  subgraph S6["6 · FINANCE"]
+    direction TB
+    BILL["Billing / Invoice<br/>Milestone · GST e-invoice / e-way bill<br/><i>/api/invoices</i>"]
+    GL["General Ledger<br/>AR · AP · Payments<br/><i>/api/gl</i>"]
+    BILL ==>|"invoice.posted&nbsp;&nbsp;⚡ auto journal"| GL
+  end
+
+  SVC --> FA["Failure Analysis (M14)<br/>NCR → RCA → CAPA<br/>Pareto · Cost impact"]
+  GL --> PROF
+  FA --> PROF
+  INST --> PROF
+
+  PROF["Project Profitability (M15)<br/>Revenue vs Material / Labour / Freight /<br/>Installation / Warranty cost → Margin<br/><i>/api/profitability</i>"]
+  PROF --> DASH(["📊 CEO Dashboard (M16)<br/>Revenue · Margin · FAT Pass Rate ·<br/>Delays · Open Tickets · Order Book"])
+
+  %% cross-cutting
+  RISK{{"Delivery Risk (M9)<br/>auto 🟢🟡🔴 from PO / WO / FAT delays<br/><i>/api/delivery-forecasts/risk</i>"}}
+  PROC -.-> RISK
+  WO -.-> RISK
+  FAT -.-> RISK
+  RISK -.-> DASH
+
+  classDef auto fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
+  classDef start fill:#e3f2fd,stroke:#1565c0,stroke-width:2px;
+  classDef fin fill:#fff8e1,stroke:#f9a825,stroke-width:2px;
+  class PRJ auto;
+  class Start start;
+  class BILL,GL fin;
