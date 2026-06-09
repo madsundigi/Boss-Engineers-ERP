@@ -9,7 +9,8 @@ import { CrmController } from './crm.controller';
 import { CRM_PERMS } from './crm.constants';
 import {
   createOpportunitySchema, updateOpportunitySchema, advanceStageSchema, versionSchema,
-  loseSchema, listOpportunityQuerySchema, createActivitySchema, listActivityQuerySchema,
+  loseSchema, listOpportunityQuerySchema, forecastQuerySchema,
+  createActivitySchema, listActivityQuerySchema,
 } from './crm.dto';
 
 /**
@@ -27,6 +28,10 @@ export function crmRouter(pool: Pool): Router {
     validate(listOpportunityQuerySchema, 'query'), asyncHandler(controller.exportCsv));
   r.get('/opportunities/pipeline', requirePermission(P.VIEW),
     asyncHandler(controller.pipelineSummary));
+  // Revenue Forecasting (weighted sales pipeline). MUST precede '/opportunities/:id'
+  // so 'forecast' is not captured as an opportunity id.
+  r.get('/opportunities/forecast', requirePermission(P.VIEW),
+    validate(forecastQuerySchema, 'query'), asyncHandler(controller.revenueForecast));
 
   r.get('/opportunities', requirePermission(P.VIEW),
     validate(listOpportunityQuerySchema, 'query'), asyncHandler(controller.listOpportunities));

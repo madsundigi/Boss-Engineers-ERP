@@ -2,6 +2,7 @@ import { WorkloadService } from '../src/modules/workload/workload.service';
 import { WorkloadRepository } from '../src/modules/workload/workload.repository';
 import { RequestContext } from '../src/common/request-context';
 import { Allocation, Timesheet } from '../src/modules/workload/workload.types';
+import { createAllocationSchema } from '../src/modules/workload/workload.dto';
 import { AppError } from '../src/common/http-error';
 
 const ctx: RequestContext = {
@@ -12,7 +13,7 @@ const ctx: RequestContext = {
 const alloc: Allocation = {
   allocId: 5, companyId: 1, employeeId: 7, employeeName: 'Asha Rao',
   projectId: 3, taskId: null, allocDate: '2026-06-10', plannedHours: 4,
-  status: 'PLANNED', rowVersion: 1,
+  status: 'PLANNED', refType: null, refId: null, rowVersion: 1,
 };
 
 const timesheet: Timesheet = {
@@ -75,6 +76,46 @@ describe('WorkloadService', () => {
       });
       expect(out.overAllocated).toBe(true);           // 6 + 4 = 10 > 8
       expect(out.allocatedHours).toBe(10);
+    });
+
+    it('threads a downstream work-item ref (refType/refId) through to the repo', async () => {
+      repo.getEmployeeCostRate.mockResolvedValue(500);
+      repo.allocatedHoursOn.mockResolvedValue(0);
+      const linked: Allocation = { ...alloc, refType: 'WORK_ORDER', refId: 42 };
+      repo.createAllocation.mockResolvedValue(linked);
+      const dto = {
+        employeeId: 7, projectId: 3, allocDate: '2026-06-10', plannedHours: 4,
+        refType: 'WORK_ORDER' as const, refId: 42,
+      };
+      const out = await service.createAllocation(ctx, dto);
+      // The ref must reach the repository unchanged...
+      expect(repo.createAllocation).toHaveBeenCalledWith(ctx, dto);
+      // ...and round-trip back out on the created allocation.
+      expect(out.allocation.refType).toBe('WORK_ORDER');
+      expect(out.allocation.refId).toBe(42);
+    });
+  });
+
+  // The both-or-neither rule is enforced at the DTO boundary (route validate()),
+  // so exercise it directly against the schema (the service is past Zod).
+  describe('createAllocationSchema — work-item ref refinement', () => {
+    const base = { employeeId: 7, projectId: 3, allocDate: '2026-06-10', plannedHours: 4 };
+
+    it('accepts an allocation with both refType and refId', () => {
+      const r = createAllocationSchema.safeParse({ ...base, refType: 'INSTALLATION', refId: 9 });
+      expect(r.success).toBe(true);
+    });
+    it('accepts an allocation with neither ref field', () => {
+      expect(createAllocationSchema.safeParse(base).success).toBe(true);
+    });
+    it('rejects refType without refId', () => {
+      expect(createAllocationSchema.safeParse({ ...base, refType: 'FAT' }).success).toBe(false);
+    });
+    it('rejects refId without refType', () => {
+      expect(createAllocationSchema.safeParse({ ...base, refId: 9 }).success).toBe(false);
+    });
+    it('rejects an unknown refType value', () => {
+      expect(createAllocationSchema.safeParse({ ...base, refType: 'SHIPMENT', refId: 9 }).success).toBe(false);
     });
   });
 

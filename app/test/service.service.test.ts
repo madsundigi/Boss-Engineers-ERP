@@ -14,7 +14,8 @@ function ticket(over: Partial<ServiceTicket> = {}): ServiceTicket {
     ticketId: 30, ticketNo: 'TKT/MUM/2026-27/000030', companyId: 1, buId: 1,
     customerId: 50, serialId: null, warrantyId: null, contractId: null,
     priority: 'MED', isInWarranty: false, reportedAt: 't', slaDueAt: null,
-    resolution: null, status: 'OPEN', assignedEngineerId: null,
+    resolvedAt: null, resolution: null, csatRating: null,
+    status: 'OPEN', assignedEngineerId: null,
     createdAt: 't', createdBy: 5, updatedAt: 't', rowVersion: 1,
     visits: [], spares: [], ...over,
   };
@@ -32,6 +33,7 @@ function makeRepo() {
     create: jest.fn(),
     findById: jest.fn(),
     list: jest.fn(),
+    kpis: jest.fn(),
     update: jest.fn(),
     updateStatus: jest.fn(),
     assign: jest.fn(),
@@ -151,11 +153,13 @@ describe('ServiceService', () => {
         spares: [{ spareIssueId: 1, itemId: 7, qty: 2, unitCost: 50, isChargeable: false }],
       }));
       repo.updateStatus.mockResolvedValue(ticket({ status: 'RESOLVED', resolution: 'replaced seal', rowVersion: 2 }));
-      const out = await service.resolve(ctx, 30, { resolution: 'replaced seal', rowVersion: 1 });
+      const out = await service.resolve(ctx, 30, { resolution: 'replaced seal', csatRating: 4, rowVersion: 1 });
       expect(out.status).toBe('RESOLVED');
       const [, , , status, patch, event] = repo.updateStatus.mock.calls[0];
       expect(status).toBe('RESOLVED');
-      expect(patch).toMatchObject({ resolution: 'replaced seal' });
+      // resolved_at is stamped (now()) and the CSAT score captured on the same write.
+      expect(patch).toMatchObject({ resolution: 'replaced seal', csat_rating: 4 });
+      expect(typeof (patch as { resolved_at?: unknown }).resolved_at).toBe('string');
       expect(event).toMatchObject({
         eventType: 'service_ticket.resolved', aggregateType: 'SERVICE_TICKET', aggregateId: 30,
       });
@@ -203,6 +207,49 @@ describe('ServiceService', () => {
         warrantyId: 11, decision: 'APPROVED', rowVersion: 1,
       }))).resolves.toBe(409);
       expect(repo.recordWarrantyClaim).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('kpis', () => {
+    const zeroKpis = {
+      mttrHours: 0, slaCompliancePct: 0, csatAvg: 0, csatCount: 0,
+      firstTimeFixPct: 0, resolvedCount: 0, openCount: 0, totalTickets: 0,
+    };
+
+    it('passes through the repo KPI object (no window) unchanged', async () => {
+      const k = {
+        mttrHours: 12.5, slaCompliancePct: 80, csatAvg: 4.25, csatCount: 4,
+        firstTimeFixPct: 75, resolvedCount: 4, openCount: 2, totalTickets: 6,
+      };
+      repo.kpis.mockResolvedValue(k);
+      const out = await service.kpis(ctx, {});
+      expect(out).toEqual(k);
+      // no fromDate/toDate derived when no window requested
+      expect(repo.kpis).toHaveBeenCalledWith(ctx, {});
+    });
+
+    it('resolves windowDays into a fromDate lower bound and echoes windowDays', async () => {
+      repo.kpis.mockResolvedValue(zeroKpis);
+      const out = await service.kpis(ctx, { windowDays: 30 });
+      expect(out.windowDays).toBe(30);
+      const [, window] = repo.kpis.mock.calls[0];
+      expect(window).toHaveProperty('fromDate');
+      expect((window as { fromDate: string }).fromDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect((window as { toDate?: string }).toDate).toBeUndefined();
+    });
+
+    it('passes an explicit fromDate/toDate range through (no windowDays echo)', async () => {
+      repo.kpis.mockResolvedValue(zeroKpis);
+      const out = await service.kpis(ctx, { fromDate: '2026-01-01', toDate: '2026-03-31' });
+      expect(out.windowDays).toBeUndefined();
+      expect(repo.kpis).toHaveBeenCalledWith(ctx, { fromDate: '2026-01-01', toDate: '2026-03-31' });
+    });
+
+    it('an explicit fromDate wins over windowDays (windowDays still echoed)', async () => {
+      repo.kpis.mockResolvedValue(zeroKpis);
+      const out = await service.kpis(ctx, { fromDate: '2026-05-01', windowDays: 7 });
+      expect(out.windowDays).toBe(7);
+      expect(repo.kpis).toHaveBeenCalledWith(ctx, { fromDate: '2026-05-01' });
     });
   });
 

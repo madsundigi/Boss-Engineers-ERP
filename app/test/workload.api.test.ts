@@ -92,8 +92,33 @@ d('Workload API (integration)', () => {
     expect(res.status).toBe(201);
     expect(res.body.allocation.status).toBe('PLANNED');
     expect(res.body.allocation.employeeId).toBe(employeeId);
+    // No work-item ref supplied -> both ref fields null on the projection.
+    expect(res.body.allocation.refType).toBeNull();
+    expect(res.body.allocation.refId).toBeNull();
     expect(typeof res.body.overAllocated).toBe('boolean');
     expect(res.body.allocatedHours).toBeGreaterThanOrEqual(4);
+  });
+
+  it('links an allocation to a downstream work item (refType/refId round-trips)', async () => {
+    const res = await request(app).post('/api/workload/allocations').set(hdr(hrUser)).send({
+      employeeId, projectId, allocDate: '2026-06-13', plannedHours: 4,
+      refType: 'WORK_ORDER', refId: 12345,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.allocation.refType).toBe('WORK_ORDER');
+    expect(res.body.allocation.refId).toBe(12345);
+
+    // The ref must survive a re-read (confirm via GET by id).
+    const got = await request(app).get(`/api/workload/allocations/${res.body.allocation.allocId}`).set(hdr(hrUser));
+    expect(got.status).toBe(200);
+    expect(got.body.refType).toBe('WORK_ORDER');
+    expect(got.body.refId).toBe(12345);
+  });
+
+  it('rejects a half-specified work-item ref (400): refType without refId', async () => {
+    const res = await request(app).post('/api/workload/allocations').set(hdr(hrUser))
+      .send({ employeeId, projectId, allocDate: '2026-06-13', plannedHours: 4, refType: 'FAT' });
+    expect(res.status).toBe(400);
   });
 
   it('flags over-allocation once the day exceeds 8h capacity', async () => {

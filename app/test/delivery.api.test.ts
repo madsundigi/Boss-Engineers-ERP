@@ -43,6 +43,9 @@ d('Delivery Prediction API (integration) — append-only forecast log, RBAC', ()
   let productionUser: number;
   let projectId: number;
   let customerId: number;
+  let vendorId: number;
+  let currencyId: number;
+  let itemId: number;
 
   const hdr = (userId: number) => ({
     'x-user-id': String(userId),
@@ -66,6 +69,12 @@ d('Delivery Prediction API (integration) — append-only forecast log, RBAC', ()
     // owning superuser, so RLS does not filter these inserts. A pm_user_id is required.
     customerId = Number((await one(
       `SELECT customer_id FROM mdm.customer WHERE customer_code='CUST-TEST' AND company_id=$1`, [companyId])).customer_id);
+    // Upstream-signal seeds reference a vendor (PO), a currency (PO) and an item (WO).
+    vendorId = Number((await one(
+      `SELECT vendor_id FROM mdm.vendor WHERE vendor_code='VEND-TEST' AND company_id=$1`, [companyId])).vendor_id);
+    currencyId = Number((await one(`SELECT currency_id FROM mdm.currency WHERE iso_code='INR'`)).currency_id);
+    itemId = Number((await one(
+      `SELECT item_id FROM mdm.item WHERE item_code='ITEM-TEST' AND company_id=$1`, [companyId])).item_id);
 
     const proj = await one(
       `INSERT INTO proj.project (company_id, project_no, project_name, customer_id, pm_user_id, status)
@@ -155,6 +164,70 @@ d('Delivery Prediction API (integration) — append-only forecast log, RBAC', ()
     expect(evt.rowCount).toBeGreaterThanOrEqual(1);
     expect(evt.rows[0].payload.projectId).toBe(projectId);
     expect(evt.rows[0].payload.driver).toBe('MATERIAL');
+  });
+
+  it('derives AUTO delivery-risk from upstream signals (GET /risk/:projectId)', async () => {
+    const one = async (sql: string, params: unknown[] = []) => (await pool.query(sql, params)).rows[0];
+    const stamp = Date.now();
+
+    // A fresh project so the three signal counts are exact (isolated from the
+    // forecast-test project's rows). Owner connection bypasses RLS for the seed.
+    const riskProject = Number((await one(
+      `INSERT INTO proj.project (company_id, project_no, project_name, customer_id, pm_user_id, status)
+       VALUES ($1, $2, 'Delivery Risk Test Project', $3, $4, 'ACTIVE')
+       RETURNING project_id`,
+      [companyId, `PRJ-DLV-RISK-${stamp}`, customerId, planningUser])).project_id);
+
+    // GREEN first: a brand-new project with no upstream rows has no risk.
+    const green = await request(app).get(`/api/delivery-forecasts/risk/${riskProject}`).set(hdr(planningUser));
+    expect(green.status).toBe(200);
+    expect(green.body).toMatchObject({
+      projectId: riskProject, riskLevel: 'GREEN', driver: null,
+      signals: { overduePurchaseOrders: 0, delayedWorkOrders: 0, pendingOrFailedFats: 0 },
+    });
+
+    // One overdue PO (APPROVED, expected_date in the past) -> Purchase Delay.
+    await one(
+      `INSERT INTO scm.purchase_order
+         (company_id, po_no, vendor_id, project_id, currency_id, total_amount, expected_date, status)
+       VALUES ($1, $2, $3, $4, $5, 1000, CURRENT_DATE - 7, 'APPROVED')`,
+      [companyId, `PO-DLV-${stamp}`, vendorId, riskProject, currencyId]);
+    // One delayed WO (IN_PROGRESS, planned_end in the past) -> Production Delay.
+    await one(
+      `INSERT INTO mfg.work_order
+         (company_id, wo_no, project_id, item_id, qty, planned_end, status)
+       VALUES ($1, $2, $3, $4, 1, CURRENT_DATE - 3, 'IN_PROGRESS')`,
+      [companyId, `WO-DLV-${stamp}`, riskProject, itemId]);
+    // One pending/failed FAT (FAILED) -> Resource/FAT Delay (forces RED + QUALITY).
+    const protoId = Number((await one(
+      `INSERT INTO qms.fat_protocol (company_id, protocol_code, protocol_name)
+       VALUES ($1, $2, 'DLV Risk Protocol') RETURNING protocol_id`,
+      [companyId, `FATP/DLV/${stamp}`])).protocol_id);
+    await one(
+      `INSERT INTO qms.fat_execution (company_id, fat_no, project_id, protocol_id, status)
+       VALUES ($1, $2, $3, $4, 'FAILED')`,
+      [companyId, `FAT/DLV/${stamp}`, riskProject, protoId]);
+
+    const red = await request(app).get(`/api/delivery-forecasts/risk/${riskProject}`).set(hdr(planningUser));
+    expect(red.status).toBe(200);
+    expect(red.body.signals).toEqual({
+      overduePurchaseOrders: 1, delayedWorkOrders: 1, pendingOrFailedFats: 1,
+    });
+    expect(red.body.riskLevel).toBe('RED');       // a pending/failed FAT alone forces RED
+    expect(red.body.driver).toBe('QUALITY');      // FAT is the largest signal
+    expect(typeof red.body.asOf).toBe('string');
+
+    // SALES holds DELIVERY_FORECAST.VIEW, so the read is permitted (200, not 403).
+    const asSales = await request(app).get(`/api/delivery-forecasts/risk/${riskProject}`).set(hdr(salesUser));
+    expect(asSales.status).toBe(200);
+
+    // 404 for a project that does not exist for this company.
+    const missing = await request(app).get('/api/delivery-forecasts/risk/99999999').set(hdr(planningUser));
+    expect(missing.status).toBe(404);
+
+    // 400 for a non-positive / non-integer projectId (param validation).
+    const bad = await request(app).get('/api/delivery-forecasts/risk/0').set(hdr(planningUser));
+    expect(bad.status).toBe(400);
   });
 
   it('exposes NO update/delete route (append-only): PUT/PATCH/DELETE -> 404', async () => {

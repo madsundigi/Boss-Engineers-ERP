@@ -3,9 +3,10 @@ import { RequestContext } from '../../common/request-context';
 import {
   FailureRepository, NcrHeaderInput, RcaInput, CapaInput, CapaActionInput,
 } from './failure.repository';
-import { Ncr, Capa, CapaAction, NcrListResult } from './failure.types';
+import { Ncr, Capa, CapaAction, NcrListResult, ParetoReport, ParetoRow } from './failure.types';
 import {
   CreateNcrDto, AddRcaDto, AddCapaDto, AddCapaActionDto, UpdateCapaStatusDto, ListQueryDto,
+  ParetoQueryDto,
 } from './failure.dto';
 import { canTransition, CAPA_SETTLED, NCR_CLOSED_EVENT } from './failure.constants';
 
@@ -41,6 +42,36 @@ export class FailureService {
 
   list(ctx: RequestContext, query: ListQueryDto): Promise<NcrListResult> {
     return this.repo.list(ctx, query);
+  }
+
+  /**
+   * Pareto / repeat-failure report (read-only): take the repository's ordered raw
+   * counts and fold in the share + a running cumulative share, plus the repeat flag.
+   * Done in TS (not SQL) so the math stays trivially testable. total is the sum of
+   * the buckets (each NCR counts once), so an empty company is { total: 0, rows: [] }
+   * and percentages never divide by zero. NULL-keyed buckets surface as
+   * 'Unclassified'. A bucket with count >= 2 is a recurring/repeat failure.
+   */
+  async pareto(ctx: RequestContext, dto: ParetoQueryDto): Promise<ParetoReport> {
+    const counts = await this.repo.paretoCounts(ctx, dto);
+    const total = counts.reduce((sum, r) => sum + r.count, 0);
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+
+    let cumulative = 0;
+    const rows: ParetoRow[] = counts.map((r) => {
+      const pct = total === 0 ? 0 : round2((r.count / total) * 100);
+      cumulative += r.count;
+      const cumulativePct = total === 0 ? 0 : round2((cumulative / total) * 100);
+      return {
+        failureModeId: r.key,
+        failureMode: r.key === null ? 'Unclassified' : r.label,
+        count: r.count,
+        pct,
+        cumulativePct,
+        isRepeat: r.count >= 2,
+      };
+    });
+    return { by: dto.by, total, rows };
   }
 
   /**

@@ -2,9 +2,13 @@ import { Errors } from '../../common/http-error';
 import { RequestContext } from '../../common/request-context';
 import { OutboxEventInput } from '../../outbox/outbox';
 import { DeliveryRepository, ForecastInput } from './delivery.repository';
-import { DeliveryForecast, DeliveryForecastListResult } from './delivery.types';
+import {
+  DeliveryForecast, DeliveryForecastListResult, DeliveryRiskSignals, DeliveryRiskResult,
+} from './delivery.types';
 import { CreateForecastDto, ListQueryDto } from './delivery.dto';
-import { DELIVERY_AT_RISK_EVENT } from './delivery.constants';
+import {
+  DELIVERY_AT_RISK_EVENT, RiskRag, RiskDriver, RISK_RED_DELAY_THRESHOLD,
+} from './delivery.constants';
 
 /**
  * DeliveryService — business logic for the Delivery Prediction module (M09).
@@ -67,6 +71,57 @@ export class DeliveryService {
     const row = await this.repo.findLatestForProject(ctx, projectId);
     if (!row) throw Errors.notFound(`No delivery forecast found for project ${projectId}`);
     return row;
+  }
+
+  /**
+   * AUTO delivery-risk (GET /risk/:projectId) — DERIVE the flowchart's Green/
+   * Yellow/Red light from live upstream signals instead of the hand-entered
+   * forecast. Verifies the project exists for this company (404 otherwise),
+   * reads the three signals, then maps them to a RAG + driver in {@link deriveRisk}.
+   * Read-only: no write, no event.
+   */
+  async getProjectRisk(ctx: RequestContext, projectId: number): Promise<DeliveryRiskResult> {
+    if (!(await this.repo.projectExists(ctx, projectId))) {
+      throw Errors.notFound(`Project ${projectId} not found`);
+    }
+    const signals = await this.repo.fetchRiskSignals(ctx, projectId);
+    const { riskLevel, driver } = DeliveryService.deriveRisk(signals);
+    return { projectId, riskLevel, driver, signals, asOf: new Date().toISOString() };
+  }
+
+  /**
+   * Pure risk-derivation rule (no I/O — unit-testable in isolation).
+   *
+   * riskLevel:
+   *   RED    if any FAT is pending/failed (a quality miss blocks ship), OR the
+   *          combined overdue-PO + delayed-WO count reaches RISK_RED_DELAY_THRESHOLD (3);
+   *   YELLOW if any single signal is > 0 (some slip, but below the RED bar);
+   *   GREEN  otherwise (all three signals zero).
+   *
+   * driver = the category contributing the largest signal, mapped:
+   *   MATERIAL ← overduePurchaseOrders, SCHEDULE ← delayedWorkOrders,
+   *   QUALITY  ← pendingOrFailedFats. Ties break QUALITY > MATERIAL > SCHEDULE
+   *   (quality is the hardest gate, material lead-time the next hardest to recover).
+   *   driver is null exactly when riskLevel is GREEN.
+   */
+  static deriveRisk(s: DeliveryRiskSignals): { riskLevel: RiskRag; driver: RiskDriver | null } {
+    const { overduePurchaseOrders: po, delayedWorkOrders: wo, pendingOrFailedFats: fat } = s;
+
+    const riskLevel: RiskRag =
+      fat > 0 || po + wo >= RISK_RED_DELAY_THRESHOLD ? 'RED'
+        : po > 0 || wo > 0 ? 'YELLOW'
+          : 'GREEN';
+
+    if (riskLevel === 'GREEN') return { riskLevel, driver: null };
+
+    // Largest contributing signal wins; ties resolve QUALITY > MATERIAL > SCHEDULE.
+    const ranked: Array<[number, RiskDriver]> = [
+      [fat, 'QUALITY'],
+      [po, 'MATERIAL'],
+      [wo, 'SCHEDULE'],
+    ];
+    const driver = ranked.reduce((best, cur) => (cur[0] > best[0] ? cur : best))[1];
+    return { riskLevel, driver };
   }
 
   /** DELIVERY_FORECAST.EXPORT — CSV of the (filtered) forecast list. */

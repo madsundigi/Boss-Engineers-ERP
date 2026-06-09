@@ -24,6 +24,7 @@ export interface KpiSummary {
   openNcrs: number;             // count of qms.ncr where status <> 'CLOSED'
   avgMarginPct: number;         // mean margin_pct over the latest snapshot per project
   deliveryAtRisk: number;       // projects whose latest forecast is risk_level='HIGH'
+  criticalItems: number;        // open critical components (scm.critical_item <> RECEIVED)
 }
 
 /** One stage of the sales funnel (GET /api/dashboard/sales-funnel). */

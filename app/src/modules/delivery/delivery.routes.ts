@@ -7,7 +7,7 @@ import { DeliveryRepository } from './delivery.repository';
 import { DeliveryService } from './delivery.service';
 import { DeliveryController } from './delivery.controller';
 import { DELIVERY_PERMS } from './delivery.constants';
-import { createForecastSchema, listQuerySchema } from './delivery.dto';
+import { createForecastSchema, listQuerySchema, riskParamsSchema } from './delivery.dto';
 
 /**
  * Compose the Delivery Prediction module (repository -> service -> controller)
@@ -39,6 +39,13 @@ export function deliveryRouter(pool: Pool): Router {
   r.get('/latest/:projectId',
     requirePermission(P.VIEW),
     asyncHandler(controller.getLatest));
+
+  // AUTO delivery-risk: Green/Yellow/Red derived from live upstream delay signals
+  // (overdue POs + delayed WOs + pending/failed FATs). Read-only; 404 if no such project.
+  r.get('/risk/:projectId',
+    requirePermission(P.VIEW),
+    validate(riskParamsSchema, 'params'),
+    asyncHandler(controller.getRisk));
 
   return r;
 }

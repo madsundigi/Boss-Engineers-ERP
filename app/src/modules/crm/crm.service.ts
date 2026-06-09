@@ -3,11 +3,11 @@ import { RequestContext } from '../../common/request-context';
 import { CrmRepository, OpportunityInput, ActivityInput } from './crm.repository';
 import {
   Opportunity, OpportunityListResult, PipelineStageSummary,
-  Activity, ActivityListResult, Customer360,
+  Activity, ActivityListResult, Customer360, RevenueForecast,
 } from './crm.types';
 import {
   CreateOpportunityDto, UpdateOpportunityDto, AdvanceStageDto, LoseDto,
-  ListOpportunityQueryDto, CreateActivityDto, ListActivityQueryDto,
+  ListOpportunityQueryDto, CreateActivityDto, ListActivityQueryDto, ForecastQueryDto,
 } from './crm.dto';
 import {
   canAdvance, TERMINAL_STAGES, OpportunityStage, OPPORTUNITY_WON_EVENT,
@@ -61,6 +61,28 @@ export class CrmService {
 
   pipelineSummary(ctx: RequestContext, customerId?: number): Promise<PipelineStageSummary[]> {
     return this.repo.pipelineSummary(ctx, customerId);
+  }
+
+  /**
+   * Revenue Forecasting (weighted sales pipeline) — the Quotation / Sales flow pushes
+   * the open opportunity pipeline here for a probability-weighted commit number.
+   * Folds the repo's per-stage / per-month parts into the top-level totals:
+   * weightedTotal = Σ(weighted), grossOpenTotal = Σ(gross) over the OPEN stages
+   * (stage NOT IN WON, LOST); wonTotal is the closed-won Σ est_value. Money totals are
+   * rounded to 4 dp to dodge float drift from the probability weighting. Returns zeros
+   * / empty arrays for a company with no opportunities.
+   */
+  async revenueForecast(ctx: RequestContext, query: ForecastQueryDto): Promise<RevenueForecast> {
+    const { byStage, byMonth, wonTotal } = await this.repo.revenueForecast(ctx, query);
+    const weightedTotal = round4(byStage.reduce((s, r) => s + r.weighted, 0));
+    const grossOpenTotal = round4(byStage.reduce((s, r) => s + r.gross, 0));
+    return {
+      weightedTotal,
+      grossOpenTotal,
+      wonTotal: round4(wonTotal),
+      byStage,
+      byMonth,
+    };
   }
 
   async updateOpportunity(ctx: RequestContext, id: number, dto: UpdateOpportunityDto): Promise<Opportunity> {

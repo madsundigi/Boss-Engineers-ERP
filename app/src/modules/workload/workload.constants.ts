@@ -4,6 +4,15 @@
 export const ALLOCATION_STATUS = ['PLANNED', 'CONFIRMED', 'CANCELLED'] as const;
 export type AllocationStatus = (typeof ALLOCATION_STATUS)[number];
 
+/**
+ * Downstream work-item kinds an allocation may optionally point at (mirrors
+ * hcm.resource_allocation.ck_alloc_ref_type). Lets the workload connect to the
+ * specific Production work-order / FAT / Installation it serves, in addition to
+ * its project/WBS link (closes the "Workload -> Production/FAT/Installation" arrow).
+ */
+export const ALLOCATION_REF_TYPE = ['WORK_ORDER', 'FAT', 'INSTALLATION'] as const;
+export type AllocationRefType = (typeof ALLOCATION_REF_TYPE)[number];
+
 /** Timesheet lifecycle (mirrors hcm.timesheet.ck_ts_status). */
 export const TIMESHEET_STATUS = ['DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED'] as const;
 export type TimesheetStatus = (typeof TIMESHEET_STATUS)[number];

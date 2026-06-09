@@ -25,6 +25,7 @@ export interface KpiParts {
   openNcrs: number;
   avgMarginPct: number;
   deliveryAtRisk: number;
+  criticalItems: number;
 }
 
 /**
@@ -47,7 +48,7 @@ export class DashboardRepository {
       const cid = ctx.companyId;
       const [
         salesPipeline, activeProjects, wipWorkOrders, dispatchesMtd,
-        arOutstanding, apOutstanding, openNcrs, avgMarginPct, deliveryAtRisk,
+        arOutstanding, apOutstanding, openNcrs, avgMarginPct, deliveryAtRisk, criticalItems,
       ] = await Promise.all([
         this.salesPipeline(c, cid),
         this.activeProjects(c, cid),
@@ -58,10 +59,11 @@ export class DashboardRepository {
         this.openNcrs(c, cid),
         this.avgMarginPct(c, cid),
         this.deliveryAtRisk(c, cid),
+        this.criticalItems(c, cid),
       ]);
       return {
         salesPipeline, activeProjects, wipWorkOrders, dispatchesMtd,
-        arOutstanding, apOutstanding, openNcrs, avgMarginPct, deliveryAtRisk,
+        arOutstanding, apOutstanding, openNcrs, avgMarginPct, deliveryAtRisk, criticalItems,
       };
     });
   }
@@ -201,6 +203,18 @@ export class DashboardRepository {
        WHERE latest.risk_level = 'HIGH'`,
       [cid]);
     return Number(r.rows[0].n);
+  }
+
+  private async criticalItems(c: Queryable, cid: number): Promise<number> {
+    // Open critical components (M06) still needing action (status <> RECEIVED).
+    // scm.critical_item has no company_id; it is scoped via its project.
+    return this.scalarCount(
+      c,
+      `SELECT count(*) AS n
+         FROM scm.critical_item ci
+         JOIN proj.project p ON p.project_id = ci.project_id
+        WHERE p.company_id = $1 AND ci.status <> 'RECEIVED'`,
+      [cid]);
   }
 
   /** Run a `SELECT count(*) AS n ...` and return it as a JS number (0 on empty). */

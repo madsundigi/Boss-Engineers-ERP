@@ -154,6 +154,87 @@ d('CRM API (integration) — opportunity pipeline, activities, customer-360, RBA
     expect(won.count).toBeGreaterThanOrEqual(1);
   });
 
+  it('returns a weighted revenue forecast (200): weightedTotal + byStage math, WON/LOST excluded', async () => {
+    // Seed a deterministic set of opportunities in a unique, far-future close month so a
+    // ?fromDate/&toDate window isolates exactly these rows from any other test/seed data.
+    // The owning superuser connection bypasses RLS, so set company_id explicitly.
+    const FROM = '2099-12-01';
+    const TO = '2099-12-31';
+    const seed = async (
+      no: string, stage: string, est: number, prob: number, close: string | null,
+    ) => pool.query(
+      `INSERT INTO crm.opportunity
+         (company_id, bu_id, opp_no, customer_id, title, stage, est_value, probability_pct,
+          expected_close_date, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::date,$10)`,
+      [companyId, buId, no, customerId, 'Forecast-test ' + no, stage, est, prob, close, salesUser]);
+
+    // Open pipeline (counts toward weighted + gross): 100k@20% + 200k@50% + 400k@80%
+    //   -> gross = 700000, weighted = 20000 + 100000 + 320000 = 440000
+    await seed('OPP-FC-NEW',  'NEW',         100000, 20, '2099-12-10');
+    await seed('OPP-FC-PROP', 'PROPOSAL',    200000, 50, '2099-12-15');
+    await seed('OPP-FC-NEG',  'NEGOTIATION', 400000, 80, '2099-12-20');
+    // Terminal rows in the SAME window — must be EXCLUDED from the weighted/gross open totals.
+    await seed('OPP-FC-WON',  'WON',         999000, 90, '2099-12-25');
+    await seed('OPP-FC-LOST', 'LOST',        888000, 70, '2099-12-28');
+
+    const res = await request(app)
+      .get(`/api/crm/opportunities/forecast?fromDate=${FROM}&toDate=${TO}`).set(hdr(salesUser));
+    expect(res.status).toBe(200);
+
+    // Open-pipeline totals are exact within the isolated window.
+    expect(Number(res.body.grossOpenTotal)).toBe(700000);
+    expect(Number(res.body.weightedTotal)).toBe(440000);
+    // WON is reported separately (and only WON within the window here = 999000).
+    expect(Number(res.body.wonTotal)).toBe(999000);
+
+    // byStage covers only the OPEN stages; WON / LOST never appear.
+    const stages = res.body.byStage as Array<{ stage: string; count: number; gross: number; weighted: number }>;
+    expect(stages.some((s) => s.stage === 'WON' || s.stage === 'LOST')).toBe(false);
+    const neg = stages.find((s) => s.stage === 'NEGOTIATION');
+    expect(neg).toBeDefined();
+    expect(Number(neg!.gross)).toBe(400000);
+    expect(Number(neg!.weighted)).toBe(320000); // 400000 * 80/100
+
+    // byMonth buckets the three open rows under the seeded close month.
+    const dec = (res.body.byMonth as Array<{ month: string; gross: number; weighted: number }>)
+      .find((m) => m.month === '2099-12');
+    expect(dec).toBeDefined();
+    expect(Number(dec!.gross)).toBe(700000);
+    expect(Number(dec!.weighted)).toBe(440000);
+
+    // FINANCE is view-only (CRM.V) and may read the forecast.
+    const asFin = await request(app).get('/api/crm/opportunities/forecast').set(hdr(financeUser));
+    expect(asFin.status).toBe(200);
+
+    // Clean up the seeded rows so re-runs stay deterministic.
+    await pool.query(`DELETE FROM crm.opportunity WHERE opp_no LIKE 'OPP-FC-%' AND company_id=$1`, [companyId]);
+  });
+
+  it('buckets open opportunities with no close date under "unscheduled"', async () => {
+    await pool.query(
+      `INSERT INTO crm.opportunity
+         (company_id, bu_id, opp_no, customer_id, title, stage, est_value, probability_pct,
+          expected_close_date, created_by)
+       VALUES ($1,$2,'OPP-FC-NULL',$3,'Forecast unscheduled','QUALIFIED',50000,40,NULL,$4)`,
+      [companyId, buId, customerId, salesUser]);
+
+    const res = await request(app).get('/api/crm/opportunities/forecast').set(hdr(salesUser));
+    expect(res.status).toBe(200);
+    const un = (res.body.byMonth as Array<{ month: string; weighted: number }>)
+      .find((m) => m.month === 'unscheduled');
+    expect(un).toBeDefined();
+    expect(Number(un!.weighted)).toBeGreaterThanOrEqual(20000); // includes 50000 * 40/100
+
+    await pool.query(`DELETE FROM crm.opportunity WHERE opp_no='OPP-FC-NULL' AND company_id=$1`, [companyId]);
+  });
+
+  it('rejects an invalid forecast window (400) when toDate precedes fromDate', async () => {
+    const res = await request(app)
+      .get('/api/crm/opportunities/forecast?fromDate=2099-12-31&toDate=2099-01-01').set(hdr(salesUser));
+    expect(res.status).toBe(400);
+  });
+
   it('creates an activity (201) then completes it (-> DONE)', async () => {
     const create = await request(app).post('/api/crm/activities').set(hdr(salesUser)).send({
       oppId: createdId, customerId,

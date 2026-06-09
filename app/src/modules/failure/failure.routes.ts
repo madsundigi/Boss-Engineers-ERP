@@ -9,7 +9,7 @@ import { FailureController } from './failure.controller';
 import { FAILURE_PERMS } from './failure.constants';
 import {
   createNcrSchema, addRcaSchema, addCapaSchema, addCapaActionSchema,
-  updateCapaStatusSchema, versionSchema, listQuerySchema,
+  updateCapaStatusSchema, versionSchema, listQuerySchema, paretoQuerySchema,
 } from './failure.dto';
 
 /** Compose the Failure Analysis module (repository -> service -> controller) and routes. */
@@ -23,6 +23,13 @@ export function failureRouter(pool: Pool): Router {
     requirePermission(P.EXPORT),
     validate(listQuerySchema, 'query'),
     asyncHandler(controller.exportCsv));
+
+  // Pareto / repeat-failure report — a read, so NCR_CAPA.VIEW. Must also precede
+  // '/:id' so the literal path is not captured as an id.
+  r.get('/pareto',
+    requirePermission(P.VIEW),
+    validate(paretoQuerySchema, 'query'),
+    asyncHandler(controller.pareto));
 
   r.get('/',
     requirePermission(P.VIEW),

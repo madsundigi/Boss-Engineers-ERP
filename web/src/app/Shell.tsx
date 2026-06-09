@@ -55,6 +55,21 @@ export function Shell({ children }: { children: ReactNode }) {
         ))}
 
         <div>
+          <div className="erp-nav__section">Analytics</div>
+          {[
+            ['/reports/service-kpis', 'Service KPIs'],
+            ['/reports/pareto', 'Failure Pareto'],
+            ['/reports/forecast', 'Revenue Forecast'],
+            ['/reports/delivery-risk', 'Delivery Risk'],
+          ].map(([to, label]) => (
+            <NavLink key={to} to={to}
+              className={({ isActive }) => 'erp-nav__item' + (isActive ? ' is-active' : '')}>
+              <span className="erp-nav__icon">▷</span> {label}
+            </NavLink>
+          ))}
+        </div>
+
+        <div>
           <div className="erp-nav__section">Administration</div>
           <NavLink to="/users"
             className={({ isActive }) => 'erp-nav__item' + (isActive ? ' is-active' : '')}>

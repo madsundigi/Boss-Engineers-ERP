@@ -59,6 +59,24 @@ export type UpdateCapaStatusDto = z.infer<typeof updateCapaStatusSchema>;
 export const versionSchema = z.object({ rowVersion: z.coerce.number().int().positive() });
 export type VersionDto = z.infer<typeof versionSchema>;
 
+/**
+ * GET /api/ncrs/pareto — Pareto / repeat-failure report (read-only aggregation).
+ * `by` chooses the dimension to bucket NCRs on (failure mode by default, or severity
+ * / source); the optional raised_date window narrows the population. No paging — a
+ * Pareto is the full ordered distribution. `toDate` must not precede `fromDate`.
+ */
+export const paretoQuerySchema = z
+  .object({
+    by: z.enum(['mode', 'severity', 'source']).default('mode'),
+    fromDate: date.optional(),
+    toDate: date.optional(),
+  })
+  .refine((q) => !(q.fromDate && q.toDate) || q.fromDate <= q.toDate, {
+    message: '`fromDate` must be on or before `toDate`',
+    path: ['toDate'],
+  });
+export type ParetoQueryDto = z.infer<typeof paretoQuerySchema>;
+
 /** GET /api/ncrs — list filters + pagination (all from the query string). */
 export const listQuerySchema = z.object({
   status: z.enum(NCR_STATUS).optional(),

@@ -1,12 +1,14 @@
 import { Errors } from '../../common/http-error';
 import { RequestContext } from '../../common/request-context';
-import { ServiceRepository, TicketHeaderInput } from './service.repository';
 import {
-  ServiceTicket, ServiceTicketListResult, FieldVisit, SpareIssue, WarrantyClaim,
+  ServiceRepository, TicketHeaderInput, StatusPatch, KpiWindow,
+} from './service.repository';
+import {
+  ServiceTicket, ServiceTicketListResult, FieldVisit, SpareIssue, WarrantyClaim, ServiceKpis,
 } from './service.types';
 import {
   CreateTicketDto, UpdateTicketDto, AssignDto, ResolveDto, CancelDto,
-  WarrantyClaimDto, ListQueryDto,
+  WarrantyClaimDto, ListQueryDto, KpiQueryDto,
 } from './service.dto';
 import {
   canTransition, TERMINAL_STATUSES, ServiceTicketStatus,
@@ -62,6 +64,25 @@ export class ServiceService {
     return this.repo.list(ctx, query);
   }
 
+  /**
+   * Warranty & Service KPIs (MTTR, SLA compliance, CSAT, First-Time-Fix) — read
+   * only. A `windowDays` rolling window is resolved here against "today" into the
+   * repo's reported_at lower bound; an explicit fromDate/toDate range is passed
+   * through. The window is echoed back as `windowDays` for the rolling case.
+   */
+  async kpis(ctx: RequestContext, query: KpiQueryDto): Promise<ServiceKpis> {
+    const window: KpiWindow = {};
+    if (query.fromDate) window.fromDate = query.fromDate;
+    if (query.toDate) window.toDate = query.toDate;
+    if (query.windowDays !== undefined && !query.fromDate) {
+      const from = new Date();
+      from.setUTCDate(from.getUTCDate() - query.windowDays);
+      window.fromDate = from.toISOString().slice(0, 10);
+    }
+    const kpis = await this.repo.kpis(ctx, window);
+    return query.windowDays !== undefined ? { windowDays: query.windowDays, ...kpis } : kpis;
+  }
+
   async update(ctx: RequestContext, id: number, dto: UpdateTicketDto): Promise<ServiceTicket> {
     const { rowVersion, visits, spares, ...rest } = dto;
     const fields = rest as Partial<TicketHeaderInput>;
@@ -111,8 +132,13 @@ export class ServiceService {
     if (!canTransition(existing.status, 'RESOLVED')) {
       throw Errors.conflict(`A ${existing.status} ticket cannot be resolved`);
     }
+    // Stamp resolved_at = now() on the RESOLVED transition (only if not already
+    // set) so MTTR / SLA compliance have an authoritative resolution timestamp;
+    // optionally capture the CSAT score in the same write.
+    const patch: StatusPatch = { resolution: dto.resolution, resolved_at: new Date().toISOString() };
+    if (dto.csatRating !== undefined) patch.csat_rating = dto.csatRating;
     const updated = await this.repo.updateStatus(
-      ctx, id, dto.rowVersion, 'RESOLVED', { resolution: dto.resolution },
+      ctx, id, dto.rowVersion, 'RESOLVED', patch,
       {
         eventType: TICKET_RESOLVED_EVENT, aggregateType: 'SERVICE_TICKET', aggregateId: id,
         companyId: ctx.companyId, createdBy: ctx.userId,

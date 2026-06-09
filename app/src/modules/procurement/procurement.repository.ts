@@ -302,11 +302,16 @@ export class ProcurementRepository {
   }
 
   /**
-   * Receive goods against a PO: create the GRN header (POSTED) + lines and bump
-   * the matched po_line.received_qty atomically. The GRN is numbered via the
-   * 'GRN' doc series. `vendorId`/`buId` are derived from the parent PO so the GRN
-   * always ties back to the right supplier. warehouse_id (NOT NULL on grn_line)
-   * is taken from the request or defaulted to the bu's first active warehouse.
+   * Receive goods against a PO: create the GRN header (POSTED) + lines, bump the
+   * matched po_line.received_qty, AND post the inventory stock movement — all in
+   * one transaction. The GRN is numbered via the 'GRN' doc series.
+   * `vendorId`/`buId` are derived from the parent PO so the GRN always ties back
+   * to the right supplier. warehouse_id (NOT NULL on grn_line) is taken from the
+   * request or defaulted to the bu's first active warehouse.
+   *
+   * Procurement -> Inventory: each received line appends a positive 'GRN'
+   * scm.stock_transaction row so a goods receipt increments on-hand stock
+   * (closes the "Procurement feeds Inventory" flow). See postGrnStock below.
    */
   async receiveGrn(
     ctx: RequestContext, poId: number, vendorId: number, warehouseId: number, lines: GrnLineInput[],
@@ -335,8 +340,65 @@ export class ProcurementRepository {
             [l.receivedQty, l.poLineId, poId]);
         }
       }
+      // Inventory stock posting (same transaction => atomic with the GRN).
+      await this.postGrnStock(c, ctx, header.grnId, poId, warehouseId, lines);
       return { ...header, lines: await this.fetchGrnLines(c, header.grnId) };
     });
+  }
+
+  /**
+   * Append the inventory ledger movements for a goods receipt: one positive
+   * 'GRN' scm.stock_transaction per received line so on-hand stock goes up.
+   * Mirrors inventory.repository's append-ledger INSERT (same column list/style);
+   * we do NOT touch the inventory module — the rows are read back by it.
+   *
+   * Resolution of the columns stock_transaction requires:
+   *  - warehouse_id: the GRN's resolved warehouse (already non-null here — the
+   *    service rejects a receipt when no warehouse can be found for the branch,
+   *    and every grn_line is written with it). Used verbatim.
+   *  - qty:         + the received qty (a receipt increases stock).
+   *  - unit_cost:   the matched po_line.unit_rate when the line cites a PO line,
+   *    else 0 (an unmatched / free receipt carries no purchase price).
+   *  - project_id:  the parent PO's project (project stock vs free stock), looked
+   *    up once from scm.purchase_order; NULL when the PO is not project-bound.
+   *
+   * IDEMPOTENCY: skip entirely if a 'GRN'/grn_id stock_transaction already exists
+   * (guards any re-entry — posting is otherwise a single, once-per-GRN event).
+   */
+  private async postGrnStock(
+    c: Queryable, ctx: RequestContext, grnId: number, poId: number,
+    warehouseId: number, lines: GrnLineInput[],
+  ): Promise<void> {
+    // Guard against double-posting for the same GRN.
+    const already = await c.query(
+      `SELECT 1 FROM scm.stock_transaction
+        WHERE ref_doc_type = 'GRN' AND ref_doc_id = $1 LIMIT 1`, [grnId]);
+    if (already.rowCount) return;
+
+    // The PO's project (if any) scopes the stock as project stock.
+    const projRes = await c.query<{ project_id: string | null }>(
+      `SELECT project_id FROM scm.purchase_order WHERE po_id = $1`, [poId]);
+    const projectId = projRes.rows[0]?.project_id == null ? null : Number(projRes.rows[0].project_id);
+
+    for (const l of lines) {
+      // Unit cost from the matched PO line; 0 for an unmatched receipt.
+      let unitCost = 0;
+      if (l.poLineId) {
+        const rate = await c.query<{ unit_rate: string }>(
+          `SELECT unit_rate FROM scm.po_line WHERE po_line_id = $1 AND po_id = $2`,
+          [l.poLineId, poId]);
+        if (rate.rowCount) unitCost = Number(rate.rows[0].unit_rate);
+      }
+      await c.query(
+        `INSERT INTO scm.stock_transaction
+           (company_id, item_id, warehouse_id, txn_type, qty, unit_cost, project_id,
+            ref_doc_type, ref_doc_id, created_by)
+         VALUES ($1,$2,$3,'GRN',$4,$5,$6,'GRN',$7,$8)`,
+        [
+          ctx.companyId, l.itemId, warehouseId, l.receivedQty, unitCost, projectId,
+          grnId, ctx.userId,
+        ]);
+    }
   }
 
   /** First active warehouse for the request's business unit (GRN default location). */

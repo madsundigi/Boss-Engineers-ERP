@@ -1,5 +1,6 @@
+import { Pool, QueryResult, QueryResultRow } from 'pg';
 import { ProcurementService } from '../src/modules/procurement/procurement.service';
-import { ProcurementRepository } from '../src/modules/procurement/procurement.repository';
+import { ProcurementRepository, GrnLineInput } from '../src/modules/procurement/procurement.repository';
 import { RequestContext } from '../src/common/request-context';
 import { PurchaseRequisition, PurchaseOrder, GoodsReceipt } from '../src/modules/procurement/procurement.types';
 import { AppError } from '../src/common/http-error';
@@ -185,5 +186,108 @@ describe('ProcurementService', () => {
       // vendorId (4) + warehouse (3) are passed through from the PO / default lookup
       expect(repo.receiveGrn).toHaveBeenCalledWith(expect.anything(), 8, 4, 3, expect.any(Array));
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Repository: GRN -> Inventory stock posting (Procurement feeds Inventory).
+// Driven through a fake pg Pool/Client (no DB) so we can assert the exact
+// scm.stock_transaction INSERT receiveGrn issues in-transaction. The api test
+// (procurement.api.test.ts) covers the same path end-to-end against Postgres.
+// ---------------------------------------------------------------------------
+
+interface CapturedQuery { text: string; params: unknown[]; }
+
+/**
+ * A fake Pool whose connect() yields a client that records every query and
+ * answers from `responder`. runInContext drives BEGIN/SET/COMMIT through it too.
+ */
+function fakePool(responder: (text: string, params: unknown[]) => QueryResultRow[]): {
+  pool: Pool; queries: CapturedQuery[];
+} {
+  const queries: CapturedQuery[] = [];
+  const query = async <T extends QueryResultRow>(text: string, params: unknown[] = []): Promise<QueryResult<T>> => {
+    queries.push({ text, params });
+    const rows = responder(text, params) as T[];
+    return { rows, rowCount: rows.length, command: '', oid: 0, fields: [] };
+  };
+  const client = { query, release: () => undefined };
+  const pool = { connect: async () => client, query } as unknown as Pool;
+  return { pool, queries };
+}
+
+describe('ProcurementRepository.receiveGrn -> stock_transaction posting', () => {
+  const ctx = baseCtx();
+  const GRN_ID = 9;
+  const PO_ID = 8;
+  const WAREHOUSE_ID = 3;
+
+  // A responder that reflects the schema: GRN insert returns a header row;
+  // the idempotency probe finds nothing; the PO carries project 55; the PO line
+  // is priced at 500. Everything else (grn_line / po_line / stock_transaction
+  // INSERTs, fetchGrnLines) returns no rows.
+  const responder = (text: string): QueryResultRow[] => {
+    if (/INSERT INTO scm\.goods_receipt/i.test(text)) {
+      return [{
+        grn_id: GRN_ID, grn_no: 'GRN/MUM/2026/000001', company_id: ctx.companyId, bu_id: ctx.buId,
+        po_id: PO_ID, vendor_id: 4, grn_date: 't', status: 'POSTED', created_by: ctx.userId,
+        created_at: 't', row_version: 1,
+      }];
+    }
+    if (/FROM scm\.stock_transaction/i.test(text)) return []; // idempotency probe: none yet
+    if (/SELECT project_id FROM scm\.purchase_order/i.test(text)) return [{ project_id: 55 }];
+    if (/SELECT unit_rate FROM scm\.po_line/i.test(text)) return [{ unit_rate: '500' }];
+    return [];
+  };
+
+  const lines: GrnLineInput[] = [{ poLineId: 1, itemId: 7, receivedQty: 10, acceptedQty: 10, rejectedQty: 0 }];
+
+  it('appends one positive GRN stock_transaction per received line (qty, ref, cost, project)', async () => {
+    const { pool, queries } = fakePool(responder);
+    const repo = new ProcurementRepository(pool);
+
+    await repo.receiveGrn(ctx, PO_ID, 4, WAREHOUSE_ID, lines);
+
+    const posts = queries.filter((q) => /INSERT INTO scm\.stock_transaction/i.test(q.text));
+    expect(posts).toHaveLength(1);
+    const p = posts[0].params;
+    // VALUES ($1 company, $2 item, $3 warehouse, 'GRN', $4 qty, $5 cost, $6 project, 'GRN', $7 ref, $8 by)
+    expect(p[0]).toBe(ctx.companyId);   // company_id
+    expect(p[1]).toBe(7);               // item_id
+    expect(p[2]).toBe(WAREHOUSE_ID);    // warehouse_id
+    expect(p[3]).toBe(10);              // qty — positive received qty
+    expect(p[4]).toBe(500);             // unit_cost — from the PO line
+    expect(p[5]).toBe(55);              // project_id — from the parent PO
+    expect(p[6]).toBe(GRN_ID);          // ref_doc_id — the GRN
+    expect(p[7]).toBe(ctx.userId);      // created_by
+    // txn_type 'GRN' + ref_doc_type 'GRN' are literals in the statement.
+    expect(posts[0].text).toMatch(/'GRN'/);
+  });
+
+  it('uses unit_cost 0 and project NULL for an unmatched receipt (no poLineId, no PO project)', async () => {
+    const noProject = (text: string): QueryResultRow[] =>
+      /SELECT project_id FROM scm\.purchase_order/i.test(text) ? [{ project_id: null }] : responder(text);
+    const { pool, queries } = fakePool(noProject);
+    const repo = new ProcurementRepository(pool);
+
+    await repo.receiveGrn(ctx, PO_ID, 4, WAREHOUSE_ID, [{ itemId: 7, receivedQty: 4 }]);
+
+    const post = queries.find((q) => /INSERT INTO scm\.stock_transaction/i.test(q.text))!;
+    expect(post.params[3]).toBe(4);     // qty
+    expect(post.params[4]).toBe(0);     // unit_cost defaults to 0 (no PO line)
+    expect(post.params[5]).toBeNull();  // project_id NULL (PO not project-bound)
+    // an unmatched line must NOT look up a po_line rate
+    expect(queries.some((q) => /SELECT unit_rate FROM scm\.po_line/i.test(q.text))).toBe(false);
+  });
+
+  it('is idempotent: skips posting when a GRN stock_transaction already exists', async () => {
+    const existing = (text: string): QueryResultRow[] =>
+      /FROM scm\.stock_transaction/i.test(text) ? [{ exists: 1 }] : responder(text);
+    const { pool, queries } = fakePool(existing);
+    const repo = new ProcurementRepository(pool);
+
+    await repo.receiveGrn(ctx, PO_ID, 4, WAREHOUSE_ID, lines);
+
+    expect(queries.some((q) => /INSERT INTO scm\.stock_transaction/i.test(q.text))).toBe(false);
   });
 });

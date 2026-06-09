@@ -48,7 +48,7 @@ import {
   invoicePostedGlHandler, paymentReceivedGlHandler, vendorInvoiceApprovedGlHandler,
 } from './modules/gl/gl.handlers';
 import { quotationWonHandler } from './modules/project/project.handlers';
-import { fatPassedClearQualityHandler } from './modules/dispatch/dispatch.handlers';
+import { fatPassedClearQualityHandler, dispatchReleasedNotifyCustomerHandler } from './modules/dispatch/dispatch.handlers';
 import { dispatchReleasedWarrantyHandler } from './modules/service/service.handlers';
 import { installationAcceptedBillingHandler } from './modules/billing/billing.handlers';
 import { EmailService, EmailTransport, buildEmailTransport } from './services/email.service';
@@ -136,6 +136,11 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
   // are PROCESSED, not dead-lettered). Replaced by real handlers in later waves
   // (e.g. quotation.won -> project, fat.passed -> dispatch clearance).
   const ack: OutboxHandler = async () => undefined;
+  // Run several handlers for one event, in order. Each handler is independently
+  // idempotent, so a retry of the whole event safely re-runs all of them.
+  const compose = (...hs: OutboxHandler[]): OutboxHandler => async (e) => {
+    for (const h of hs) await h(e);
+  };
   const handlers = new Map<string, OutboxHandler>([
     ['quotation.sent', quotationSentHandler(pool, new PdfService(), email)],
     // Winning a quotation auto-seeds a Project (idempotent on quotation_id).
@@ -150,7 +155,11 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
     ['workorder.released', ack],
     ['workorder.completed', ack],
     // Releasing a dispatch starts warranty for each shipped serial.
-    ['dispatch.released', dispatchReleasedWarrantyHandler(pool)],
+    // Releasing a dispatch starts warranty per shipped serial AND notifies the customer.
+    ['dispatch.released', compose(
+      dispatchReleasedWarrantyHandler(pool),
+      dispatchReleasedNotifyCustomerHandler(pool),
+    )],
     ['service_ticket.resolved', ack],
     ['warranty_claim.approved', ack],
     // Customer acceptance (CAC) notifies Finance to raise the final invoice.

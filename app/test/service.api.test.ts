@@ -209,4 +209,162 @@ d('Service Ticket API (integration) — lifecycle, warranty claim, RBAC', () => 
       .send({ resolution: 'x', rowVersion: create.body.rowVersion });
     expect(stale.status).toBe(409);
   });
+
+  it('captures csat_rating + stamps resolved_at on resolve', async () => {
+    const create = await request(app).post('/api/service-tickets').set(hdr(serviceUser)).send({ customerId });
+    const id = create.body.ticketId;
+    const started = await request(app).post(`/api/service-tickets/${id}/start`).set(hdr(serviceUser))
+      .send({ rowVersion: create.body.rowVersion });
+    const resolved = await request(app).post(`/api/service-tickets/${id}/resolve`).set(hdr(serviceUser))
+      .send({ resolution: 'Fixed first time on site', csatRating: 5, rowVersion: started.body.rowVersion });
+    expect(resolved.status).toBe(200);
+    expect(resolved.body.csatRating).toBe(5);
+    expect(resolved.body.resolvedAt).not.toBeNull();
+  });
+
+  it('rejects an out-of-range csat rating (400)', async () => {
+    const create = await request(app).post('/api/service-tickets').set(hdr(serviceUser)).send({ customerId });
+    const id = create.body.ticketId;
+    const started = await request(app).post(`/api/service-tickets/${id}/start`).set(hdr(serviceUser))
+      .send({ rowVersion: create.body.rowVersion });
+    const bad = await request(app).post(`/api/service-tickets/${id}/resolve`).set(hdr(serviceUser))
+      .send({ resolution: 'x', csatRating: 6, rowVersion: started.body.rowVersion });
+    expect(bad.status).toBe(400);
+  });
+
+  describe('GET /kpis — Warranty & Service KPIs', () => {
+    // Seed a deterministic mini-population in a FRESH company so the KPI math is
+    // exact and isolated from the lifecycle tickets created above. We INSERT
+    // directly (owner connection, RLS bypassed) so resolved_at / reported_at /
+    // sla_due_at / csat_rating and the per-ticket visit counts are fully controlled.
+    let kCompanyId: number;
+    let kBuId: number;
+    let kCustomerId: number;
+
+    const khdr = () => ({
+      'x-user-id': String(serviceUser),
+      'x-company-id': String(kCompanyId),
+      'x-bu-id': String(kBuId),
+    });
+
+    // One ticket helper: reported `repHrsAgo` ago, optionally resolved `resHrsAgo`
+    // ago, with an SLA `slaHrsFromReport` h after report, a csat score, and N visits.
+    const seedTicket = async (o: {
+      no: string; status: string; repHrsAgo: number;
+      resHrsAgo?: number | null; slaHrsFromReport?: number | null;
+      csat?: number | null; visits?: number;
+    }) => {
+      const row = (await pool.query(
+        `INSERT INTO svc.service_ticket
+           (company_id, bu_id, ticket_no, customer_id, priority, is_in_warranty,
+            reported_at, sla_due_at, resolved_at, resolution, csat_rating, status)
+         VALUES ($1,$2,$3,$4,'MED',false,
+                 now() - ($5 || ' hours')::interval,
+                 CASE WHEN $6::numeric IS NULL THEN NULL
+                      ELSE now() - ($5 || ' hours')::interval + ($6 || ' hours')::interval END,
+                 CASE WHEN $7::numeric IS NULL THEN NULL ELSE now() - ($7 || ' hours')::interval END,
+                 CASE WHEN $7::numeric IS NULL THEN NULL ELSE 'resolved' END,
+                 $8, $9)
+         RETURNING ticket_id`,
+        [kCompanyId, kBuId, o.no, kCustomerId,
+         o.repHrsAgo, o.slaHrsFromReport ?? null, o.resHrsAgo ?? null,
+         o.csat ?? null, o.status])).rows[0];
+      const ticketId = Number(row.ticket_id);
+      for (let i = 0; i < (o.visits ?? 0); i++) {
+        await pool.query(
+          `INSERT INTO svc.field_visit (ticket_id, visit_date, travel_cost) VALUES ($1, current_date, 0)`,
+          [ticketId]);
+      }
+      return ticketId;
+    };
+
+    beforeAll(async () => {
+      const one = async (sql: string, params: unknown[] = []) => (await pool.query(sql, params)).rows[0];
+      // A throwaway company + BU + customer dedicated to the KPI math, isolated by
+      // RLS (the GET runs as erp_app scoped to this company_id) so the population
+      // counts are exact and untouched by the lifecycle tickets above. The service
+      // user's SERVICE_TICKET.VIEW grant is company-agnostic (requirePermission
+      // checks the permission set only), so the GET authorizes for any company.
+      const currencyId = Number((await one(`SELECT currency_id FROM mdm.currency WHERE iso_code='INR'`)).currency_id);
+      kCompanyId = Number((await one(
+        `INSERT INTO mdm.company (company_code, legal_name, base_currency_id)
+         VALUES ('SVCKPI', 'Service KPI Co', $1)
+         ON CONFLICT (company_code) DO UPDATE SET legal_name = EXCLUDED.legal_name
+         RETURNING company_id`, [currencyId])).company_id);
+      kBuId = Number((await one(
+        `INSERT INTO mdm.business_unit (company_id, bu_code, bu_name)
+         VALUES ($1, 'KPI', 'KPI Branch')
+         ON CONFLICT (company_id, bu_code) DO UPDATE SET bu_name = EXCLUDED.bu_name
+         RETURNING bu_id`, [kCompanyId])).bu_id);
+      kCustomerId = Number((await one(
+        `INSERT INTO mdm.customer (company_id, customer_code, customer_name, default_currency_id)
+         VALUES ($1, 'KPI-CUST', 'KPI Customer', $2)
+         ON CONFLICT (customer_code) DO UPDATE SET customer_name = EXCLUDED.customer_name
+         RETURNING customer_id`, [kCompanyId, currencyId])).customer_id);
+
+      // Clean any rows from a previous run so counts are exact.
+      await pool.query(
+        `DELETE FROM svc.field_visit WHERE ticket_id IN
+           (SELECT ticket_id FROM svc.service_ticket WHERE company_id = $1)`, [kCompanyId]);
+      await pool.query(`DELETE FROM svc.service_ticket WHERE company_id = $1`, [kCompanyId]);
+
+      // Population (4 resolved/closed, 2 open) :
+      //  A RESOLVED 10h MTTR, SLA met (sla 12h), csat 5, 1 visit  -> FTF yes
+      //  B CLOSED   20h MTTR, SLA met (sla 24h), csat 3, 2 visits -> FTF no
+      //  C RESOLVED 30h MTTR, SLA MISSED (sla 5h), csat 4, 1 visit-> FTF yes
+      //  D CLOSED   40h MTTR, no SLA set,         no csat, 1 visit-> FTF yes
+      //  E OPEN     reported 3h ago (not resolved)
+      //  F ASSIGNED reported 5h ago (not resolved)
+      await seedTicket({ no: 'KPI-A', status: 'RESOLVED', repHrsAgo: 50, resHrsAgo: 40, slaHrsFromReport: 12, csat: 5, visits: 1 });
+      await seedTicket({ no: 'KPI-B', status: 'CLOSED', repHrsAgo: 60, resHrsAgo: 40, slaHrsFromReport: 24, csat: 3, visits: 2 });
+      await seedTicket({ no: 'KPI-C', status: 'RESOLVED', repHrsAgo: 80, resHrsAgo: 50, slaHrsFromReport: 5, csat: 4, visits: 1 });
+      await seedTicket({ no: 'KPI-D', status: 'CLOSED', repHrsAgo: 90, resHrsAgo: 50, slaHrsFromReport: null, csat: null, visits: 1 });
+      await seedTicket({ no: 'KPI-E', status: 'OPEN', repHrsAgo: 3 });
+      await seedTicket({ no: 'KPI-F', status: 'ASSIGNED', repHrsAgo: 5 });
+    });
+
+    it('computes MTTR, SLA compliance, CSAT, and First-Time-Fix exactly', async () => {
+      const res = await request(app).get('/api/service-tickets/kpis').set(khdr());
+      expect(res.status).toBe(200);
+      const k = res.body;
+      // Counts
+      expect(k.totalTickets).toBe(6);
+      expect(k.resolvedCount).toBe(4); // A,B,C,D
+      expect(k.openCount).toBe(2);     // E,F
+      // MTTR = mean(10,20,30,40) = 25h
+      expect(k.mttrHours).toBeCloseTo(25, 5);
+      // SLA: 3 resolved tickets HAVE an SLA (A,B,C); A,B met, C missed -> 2/3 = 66.67%
+      expect(k.slaCompliancePct).toBeCloseTo((100 * 2) / 3, 5);
+      // CSAT: ratings 5,3,4 over 3 tickets -> avg 4.0, count 3
+      expect(k.csatAvg).toBeCloseTo(4, 5);
+      expect(k.csatCount).toBe(3);
+      // FTF: resolved with exactly 1 visit = A,C,D (3) over resolved 4 -> 75%
+      expect(k.firstTimeFixPct).toBeCloseTo(75, 5);
+    });
+
+    it('returns a fully-populated zero object for a company with no tickets', async () => {
+      await pool.query(
+        `DELETE FROM svc.field_visit WHERE ticket_id IN
+           (SELECT ticket_id FROM svc.service_ticket WHERE company_id = $1)`, [kCompanyId]);
+      await pool.query(`DELETE FROM svc.service_ticket WHERE company_id = $1`, [kCompanyId]);
+      const res = await request(app).get('/api/service-tickets/kpis').set(khdr());
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        mttrHours: 0, slaCompliancePct: 0, csatAvg: 0, csatCount: 0,
+        firstTimeFixPct: 0, resolvedCount: 0, openCount: 0, totalTickets: 0,
+      });
+    });
+
+    it('echoes windowDays and applies the rolling window', async () => {
+      const res = await request(app).get('/api/service-tickets/kpis?windowDays=30').set(khdr());
+      expect(res.status).toBe(200);
+      expect(res.body.windowDays).toBe(30);
+    });
+
+    it('denies /kpis without SERVICE_TICKET.VIEW (stores -> 403)', async () => {
+      const res = await request(app).get('/api/service-tickets/kpis')
+        .set({ 'x-user-id': String(storesUser), 'x-company-id': String(kCompanyId), 'x-bu-id': String(kBuId) });
+      expect(res.status).toBe(403);
+    });
+  });
 });

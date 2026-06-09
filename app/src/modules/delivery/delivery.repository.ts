@@ -1,9 +1,14 @@
 import { Pool, QueryResultRow } from 'pg';
-import { runInContext, runRead } from '../../db/pool';
+import { runInContext, runRead, Queryable } from '../../db/pool';
 import { emitOutbox, OutboxEventInput } from '../../outbox/outbox';
 import { RequestContext } from '../../common/request-context';
-import { DeliveryForecast, DeliveryForecastListResult } from './delivery.types';
+import { DeliveryForecast, DeliveryForecastListResult, DeliveryRiskSignals } from './delivery.types';
 import { ListQueryDto } from './delivery.dto';
+import {
+  PO_SETTLED_STATUSES,
+  WO_FINISHED_STATUSES,
+  FAT_PENDING_OR_FAILED_STATUSES,
+} from './delivery.constants';
 
 // Columns of proj.delivery_forecast (company_id added in migration 017 for RLS).
 // delay_days is a GENERATED column (predicted_delivery - committed_delivery): it is
@@ -95,5 +100,65 @@ export class DeliveryRepository {
         [ctx.companyId, projectId]);
       return res.rowCount ? mapForecast(res.rows[0]) : null;
     });
+  }
+
+  /* --- AUTO delivery-risk: read-only cross-module signal aggregation --------- *
+   * Owns no table here either: every query runs inside one runRead transaction
+   * (RLS role + app.company_id GUC) and also filters company_id = $1 + project_id
+   * = $2 explicitly (defence in depth, mirrors DashboardRepository). Each count is
+   * cast to ::int so an empty table yields the JS number 0. NOT is_deleted skips
+   * soft-deleted rows (matches the procurement read path).                       */
+
+  /** True iff the project exists for this company (drives the 404). */
+  async projectExists(ctx: RequestContext, projectId: number): Promise<boolean> {
+    return runRead(this.pool, ctx, async (c) => {
+      const r = await c.query(
+        `SELECT 1 FROM proj.project
+          WHERE project_id = $1 AND company_id = $2 AND NOT is_deleted LIMIT 1`,
+        [projectId, ctx.companyId]);
+      return r.rowCount! > 0;
+    });
+  }
+
+  /**
+   * The three upstream delay signals for one project, in a single read txn:
+   *  - overduePurchaseOrders: scm.purchase_order pegged to the project, not yet
+   *    settled (status NOT IN RECEIVED/CLOSED/CANCELLED) whose expected_date has
+   *    passed. expected_date is nullable; the comparison drops NULLs, so a PO with
+   *    no promised date is never counted as overdue.
+   *  - delayedWorkOrders: mfg.work_order for the project, not finished (status NOT
+   *    IN COMPLETED/CLOSED/CANCELLED) whose planned_end has passed (NULLs dropped).
+   *  - pendingOrFailedFats: qms.fat_execution for the project whose lifecycle
+   *    status is SCHEDULED/IN_PROGRESS/FAILED (i.e. not yet passed/cleared, or failed).
+   */
+  async fetchRiskSignals(ctx: RequestContext, projectId: number): Promise<DeliveryRiskSignals> {
+    return runRead(this.pool, ctx, async (c) => {
+      const [overduePurchaseOrders, delayedWorkOrders, pendingOrFailedFats] = await Promise.all([
+        this.countScalar(c,
+          `SELECT count(*)::int AS n FROM scm.purchase_order
+            WHERE company_id = $1 AND project_id = $2 AND NOT is_deleted
+              AND status <> ALL($3::text[])
+              AND expected_date < CURRENT_DATE`,
+          [ctx.companyId, projectId, [...PO_SETTLED_STATUSES]]),
+        this.countScalar(c,
+          `SELECT count(*)::int AS n FROM mfg.work_order
+            WHERE company_id = $1 AND project_id = $2 AND NOT is_deleted
+              AND status <> ALL($3::text[])
+              AND planned_end < CURRENT_DATE`,
+          [ctx.companyId, projectId, [...WO_FINISHED_STATUSES]]),
+        this.countScalar(c,
+          `SELECT count(*)::int AS n FROM qms.fat_execution
+            WHERE company_id = $1 AND project_id = $2 AND NOT is_deleted
+              AND status = ANY($3::text[])`,
+          [ctx.companyId, projectId, [...FAT_PENDING_OR_FAILED_STATUSES]]),
+      ]);
+      return { overduePurchaseOrders, delayedWorkOrders, pendingOrFailedFats };
+    });
+  }
+
+  /** Run a `SELECT count(*)::int AS n ...` and return it as a JS number (0 on empty). */
+  private async countScalar(c: Queryable, sql: string, params: unknown[]): Promise<number> {
+    const r = await c.query<{ n: number }>(sql, params);
+    return Number(r.rows[0]?.n ?? 0);
   }
 }

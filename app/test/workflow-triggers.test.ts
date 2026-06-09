@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { OutboxRecord } from '../src/outbox/outbox';
-import { fatPassedClearQualityHandler } from '../src/modules/dispatch/dispatch.handlers';
+import { fatPassedClearQualityHandler, dispatchReleasedNotifyCustomerHandler } from '../src/modules/dispatch/dispatch.handlers';
 import { dispatchReleasedWarrantyHandler } from '../src/modules/service/service.handlers';
 import { installationAcceptedBillingHandler } from '../src/modules/billing/billing.handlers';
 
@@ -89,5 +89,27 @@ d('Cross-module workflow triggers', () => {
 
     await installationAcceptedBillingHandler(pool)(rec({ aggregateId: installId, createdBy: installUser }));
     expect((await one(`SELECT count(*)::int n FROM sec.notification WHERE link=$1 AND user_id=$2`, [link, financeUser])).n).toBe(1);
+  });
+
+  it('dispatch.released notifies the customer\'s portal users that it shipped (idempotent)', async () => {
+    // FRD §11 portal linkage: bind sales_user to CUST-TEST so it is a customer portal user.
+    const portalUser = Number((await one(`SELECT user_id FROM sec.app_user WHERE username='sales_user'`)).user_id);
+    await pool.query(`UPDATE sec.app_user SET customer_id=$1, vendor_id=NULL WHERE user_id=$2`, [customerId, portalUser]);
+    try {
+      const dispId = Number((await one(
+        `INSERT INTO log.dispatch (company_id, bu_id, dispatch_no, project_id, customer_id, status, dispatch_date)
+         VALUES ($1,$2,$3,$4,$5,'RELEASED', CURRENT_DATE) RETURNING dispatch_id`,
+        [companyId, buId, `DSP/WFN/${Date.now()}`, projectId, customerId])).dispatch_id);
+      const link = `dispatch-shipped:${dispId}`;
+
+      await dispatchReleasedNotifyCustomerHandler(pool)(rec({ eventType: 'dispatch.released', aggregateType: 'DISPATCH', aggregateId: dispId, createdBy: qcUser }));
+      expect((await one(`SELECT count(*)::int n FROM sec.notification WHERE company_id=$1 AND link=$2`, [companyId, link])).n).toBe(1);
+      expect((await one(`SELECT count(*)::int n FROM sec.notification WHERE link=$1 AND user_id=$2`, [link, portalUser])).n).toBe(1);
+
+      await dispatchReleasedNotifyCustomerHandler(pool)(rec({ aggregateId: dispId, createdBy: qcUser }));
+      expect((await one(`SELECT count(*)::int n FROM sec.notification WHERE company_id=$1 AND link=$2`, [companyId, link])).n).toBe(1);
+    } finally {
+      await pool.query(`UPDATE sec.app_user SET customer_id=NULL, vendor_id=NULL WHERE user_id=$1`, [portalUser]);
+    }
   });
 });

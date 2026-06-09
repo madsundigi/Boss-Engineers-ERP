@@ -61,3 +61,37 @@ export interface NcrListResult {
   page: number;
   pageSize: number;
 }
+
+/**
+ * One bucket of a raw Pareto count straight off the GROUP BY (repository layer).
+ * `key` is the dimension's id/value (failureModeId, or the severity/source string);
+ * null means the dimension was not set on the NCR. `label` is the human name.
+ */
+export interface ParetoCount {
+  key: number | string | null;
+  label: string;
+  count: number;
+}
+
+/**
+ * One row of the assembled Pareto report (service layer): the raw count enriched
+ * with its share (`pct`) and the running `cumulativePct`, plus `isRepeat` — true
+ * when the bucket recurred (count >= 2), which surfaces the "Repeat Failure"
+ * dimension the spec calls for. `failureModeId` / `failureMode` are kept as the
+ * row identity even when bucketing by severity/source (the value lands in both).
+ */
+export interface ParetoRow {
+  failureModeId: number | string | null;
+  failureMode: string;
+  count: number;
+  pct: number;            // count / total * 100, rounded to 2dp
+  cumulativePct: number;  // running Σ pct down the ordered rows, rounded to 2dp
+  isRepeat: boolean;      // count >= 2 (a recurring / repeat failure)
+}
+
+/** The full Pareto / repeat-failure report (GET /api/ncrs/pareto). */
+export interface ParetoReport {
+  by: 'mode' | 'severity' | 'source';
+  total: number;          // total NCRs in the (date-filtered) population
+  rows: ParetoRow[];      // ordered by count DESC
+}

@@ -3,7 +3,7 @@ import { DeliveryService } from './delivery.service';
 import { valid } from '../../common/validate';
 import { Errors } from '../../common/http-error';
 import { RequestContext } from '../../common/request-context';
-import { CreateForecastDto, ListQueryDto } from './delivery.dto';
+import { CreateForecastDto, ListQueryDto, RiskParamsDto } from './delivery.dto';
 
 function ctxOf(req: Request): RequestContext {
   if (!req.context) throw Errors.unauthorized();
@@ -29,6 +29,12 @@ export class DeliveryController {
 
   getLatest = async (req: Request, res: Response) => {
     res.json(await this.service.getLatestForProject(ctxOf(req), projectIdOf(req)));
+  };
+
+  /** GET /risk/:projectId — AUTO delivery-risk derived from upstream signals. */
+  getRisk = async (req: Request, res: Response) => {
+    const { projectId } = valid<RiskParamsDto>(req, 'params');
+    res.json(await this.service.getProjectRisk(ctxOf(req), projectId));
   };
 
   exportCsv = async (req: Request, res: Response) => {

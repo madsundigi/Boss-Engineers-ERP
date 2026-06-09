@@ -3,7 +3,7 @@ import { runInContext, runRead, Queryable } from '../../db/pool';
 import { emitOutbox, OutboxEventInput } from '../../outbox/outbox';
 import { RequestContext } from '../../common/request-context';
 import {
-  ServiceTicket, FieldVisit, SpareIssue, ServiceTicketListResult, WarrantyClaim,
+  ServiceTicket, FieldVisit, SpareIssue, ServiceTicketListResult, WarrantyClaim, ServiceKpis,
 } from './service.types';
 import { ListQueryDto } from './service.dto';
 import { DOC_TYPE, ServiceTicketStatus, ClaimStatus } from './service.constants';
@@ -14,8 +14,8 @@ import { DOC_TYPE, ServiceTicketStatus, ClaimStatus } from './service.constants'
  * table (db/04).
  */
 const H = `ticket_id, ticket_no, company_id, bu_id, customer_id, serial_id, warranty_id,
-  contract_id, priority, is_in_warranty, reported_at, sla_due_at, resolution, status,
-  assigned_engineer_id, created_at, created_by, updated_at, row_version`;
+  contract_id, priority, is_in_warranty, reported_at, sla_due_at, resolved_at, resolution,
+  csat_rating, status, assigned_engineer_id, created_at, created_by, updated_at, row_version`;
 
 type Header = Omit<ServiceTicket, 'visits' | 'spares'>;
 
@@ -33,7 +33,9 @@ function mapHeader(r: QueryResultRow): Header {
     isInWarranty: r.is_in_warranty,
     reportedAt: r.reported_at,
     slaDueAt: r.sla_due_at,
+    resolvedAt: r.resolved_at,
     resolution: r.resolution,
+    csatRating: r.csat_rating == null ? null : Number(r.csat_rating),
     status: r.status,
     assignedEngineerId: r.assigned_engineer_id == null ? null : Number(r.assigned_engineer_id),
     createdAt: r.created_at,
@@ -85,8 +87,14 @@ export interface TicketHeaderInput {
 }
 /** Partial header patch carried alongside a status / assignment change. */
 export type StatusPatch = Partial<Record<
-  'assigned_engineer_id' | 'resolution' | 'sla_due_at', unknown
+  'assigned_engineer_id' | 'resolution' | 'sla_due_at' | 'resolved_at' | 'csat_rating', unknown
 >>;
+
+/** Optional company-scoped window for the KPI aggregation (resolved_at-based). */
+export interface KpiWindow {
+  fromDate?: string; // YYYY-MM-DD inclusive lower bound on reported_at
+  toDate?: string;   // YYYY-MM-DD inclusive upper bound on reported_at
+}
 
 export class ServiceRepository {
   constructor(private readonly pool: Pool) {}
@@ -183,6 +191,86 @@ export class ServiceRepository {
         `SELECT ${H} FROM svc.service_ticket WHERE ${w}
           ORDER BY ${q.sort} ${q.dir.toUpperCase()} LIMIT ${q.pageSize} OFFSET ${offset}`, params);
       return { rows: rows.rows.map(mapHeader), total, page: q.page, pageSize: q.pageSize };
+    });
+  }
+
+  /**
+   * Warranty & Service KPI roll-up — READ-ONLY, company-scoped (RLS + explicit
+   * company_id), filtered on the (non-deleted) ticket population. An optional
+   * window bounds reported_at to a date range. Every figure is COALESCEd so an
+   * empty company returns a fully-populated zero object (never NULL / never throws).
+   *
+   * First-Time-Fix is derived from svc.field_visit: a resolved ticket "fixed first
+   * time" iff it has EXACTLY ONE field visit (GROUP BY ticket_id HAVING count = 1).
+   * Tickets with zero visits (e.g. remote / phone fixes that were never logged as a
+   * site visit) are NOT counted as first-time-fix — FTF here means "one visit
+   * resolved it", which is the field-service definition. resolvedCount is the
+   * denominator (status RESOLVED or CLOSED).
+   */
+  async kpis(ctx: RequestContext, window: KpiWindow = {}): Promise<ServiceKpis> {
+    return runRead(this.pool, ctx, async (c) => {
+      const params: unknown[] = [ctx.companyId];
+      let dateFilter = '';
+      if (window.fromDate) { params.push(window.fromDate); dateFilter += ` AND reported_at >= $${params.length}::date`; }
+      if (window.toDate) {
+        params.push(window.toDate);
+        // inclusive upper bound on the calendar day
+        dateFilter += ` AND reported_at < ($${params.length}::date + interval '1 day')`;
+      }
+      const scope = `company_id = $1 AND NOT is_deleted${dateFilter}`;
+
+      // One pass over the ticket header for the count / time / SLA / CSAT figures.
+      const agg = await c.query<{
+        total: string; resolved_cnt: string;
+        mttr_hours: number; sla_pct: number | null;
+        csat_avg: number | null; csat_cnt: string;
+      }>(
+        `SELECT
+            count(*)::text AS total,
+            count(*) FILTER (WHERE status IN ('RESOLVED','CLOSED'))::text AS resolved_cnt,
+            COALESCE(AVG(EXTRACT(EPOCH FROM (resolved_at - reported_at)) / 3600.0)
+                       FILTER (WHERE resolved_at IS NOT NULL), 0)::float8 AS mttr_hours,
+            (100.0 * count(*) FILTER (WHERE resolved_at IS NOT NULL
+                                        AND sla_due_at IS NOT NULL
+                                        AND resolved_at <= sla_due_at)
+              / NULLIF(count(*) FILTER (WHERE resolved_at IS NOT NULL
+                                          AND sla_due_at IS NOT NULL), 0))::float8 AS sla_pct,
+            AVG(csat_rating) FILTER (WHERE csat_rating IS NOT NULL)::float8 AS csat_avg,
+            count(*) FILTER (WHERE csat_rating IS NOT NULL)::text AS csat_cnt
+           FROM svc.service_ticket
+          WHERE ${scope}`, params);
+
+      // First-Time-Fix: resolved tickets resolved in exactly one field visit, over
+      // all resolved tickets. Visits are joined per ticket; tickets with no visit
+      // row contribute 0 to the FTF numerator (LEFT JOIN -> count = 0).
+      const ftf = await c.query<{ resolved: string; one_visit: string }>(
+        `SELECT
+            count(*)::text AS resolved,
+            count(*) FILTER (WHERE v.visit_cnt = 1)::text AS one_visit
+           FROM svc.service_ticket t
+           LEFT JOIN (
+             SELECT ticket_id, count(*) AS visit_cnt
+               FROM svc.field_visit GROUP BY ticket_id
+           ) v ON v.ticket_id = t.ticket_id
+          WHERE ${scope} AND t.status IN ('RESOLVED','CLOSED')`,
+        params);
+
+      const a = agg.rows[0];
+      const f = ftf.rows[0];
+      const total = Number(a.total);
+      const resolvedCount = Number(a.resolved_cnt);
+      const resolvedForFtf = Number(f.resolved);
+      const oneVisit = Number(f.one_visit);
+      return {
+        mttrHours: Number(a.mttr_hours) || 0,
+        slaCompliancePct: a.sla_pct == null ? 0 : Number(a.sla_pct),
+        csatAvg: a.csat_avg == null ? 0 : Number(a.csat_avg),
+        csatCount: Number(a.csat_cnt),
+        firstTimeFixPct: resolvedForFtf === 0 ? 0 : (100 * oneVisit) / resolvedForFtf,
+        resolvedCount,
+        openCount: total - resolvedCount,
+        totalTickets: total,
+      };
     });
   }
 

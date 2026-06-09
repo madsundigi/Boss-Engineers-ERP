@@ -5,7 +5,7 @@ import { Errors } from '../../common/http-error';
 import { RequestContext } from '../../common/request-context';
 import {
   CreateTicketDto, UpdateTicketDto, AssignDto, ResolveDto, CancelDto,
-  WarrantyClaimDto, VersionDto, ListQueryDto,
+  WarrantyClaimDto, VersionDto, ListQueryDto, KpiQueryDto,
 } from './service.dto';
 
 function ctxOf(req: Request): RequestContext {
@@ -23,6 +23,10 @@ export class ServiceController {
 
   list = async (req: Request, res: Response) => {
     res.json(await this.service.list(ctxOf(req), valid<ListQueryDto>(req, 'query')));
+  };
+
+  kpis = async (req: Request, res: Response) => {
+    res.json(await this.service.kpis(ctxOf(req), valid<KpiQueryDto>(req, 'query')));
   };
 
   create = async (req: Request, res: Response) => {

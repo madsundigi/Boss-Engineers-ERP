@@ -36,6 +36,7 @@ export class DashboardService {
       openNcrs: p.openNcrs,
       avgMarginPct: p.avgMarginPct,
       deliveryAtRisk: p.deliveryAtRisk,
+      criticalItems: p.criticalItems,
     };
   }
 
@@ -65,6 +66,7 @@ export class DashboardService {
       ['openNcrs', k.openNcrs],
       ['avgMarginPct', k.avgMarginPct],
       ['deliveryAtRisk', k.deliveryAtRisk],
+      ['criticalItems', k.criticalItems],
     ];
     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const lines = rows.map(([metric, value]) => `${esc(metric)},${esc(value)}`);

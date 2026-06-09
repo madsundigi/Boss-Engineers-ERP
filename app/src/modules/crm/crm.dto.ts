@@ -71,6 +71,22 @@ export const listOpportunityQuerySchema = z.object({
 export type ListOpportunityQueryDto = z.infer<typeof listOpportunityQuerySchema>;
 
 /**
+ * GET /api/crm/opportunities/forecast — Revenue Forecasting (weighted sales pipeline).
+ * Both bounds optional; when supplied they filter on expected_close_date (inclusive).
+ * `toDate` must not precede `fromDate`. No bounds = the whole open pipeline.
+ */
+export const forecastQuerySchema = z
+  .object({
+    fromDate: dateStr.optional(),
+    toDate: dateStr.optional(),
+  })
+  .refine((q) => !(q.fromDate && q.toDate) || q.fromDate <= q.toDate, {
+    message: '`fromDate` must be on or before `toDate`',
+    path: ['toDate'],
+  });
+export type ForecastQueryDto = z.infer<typeof forecastQuerySchema>;
+
+/**
  * POST /api/crm/activities — log a follow-up activity, linked to an opportunity
  * and/or a customer (at least one is required — enforced in the service). Raised
  * PENDING. Tenant / user come from request context.

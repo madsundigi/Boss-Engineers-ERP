@@ -9,7 +9,7 @@ import { ServiceController } from './service.controller';
 import { SERVICE_PERMS } from './service.constants';
 import {
   createTicketSchema, updateTicketSchema, assignSchema, resolveSchema, cancelSchema,
-  warrantyClaimSchema, versionSchema, listQuerySchema,
+  warrantyClaimSchema, versionSchema, listQuerySchema, kpiQuerySchema,
 } from './service.dto';
 
 /** Compose the Warranty & Service module (repository -> service -> controller) and routes. */
@@ -18,11 +18,17 @@ export function serviceRouter(pool: Pool): Router {
   const r = Router();
   const P = SERVICE_PERMS;
 
-  // Export must precede '/:id' so it is not captured as an id.
+  // Static GETs must precede '/:id' so they are not captured as an id.
   r.get('/export',
     requirePermission(P.EXPORT),
     validate(listQuerySchema, 'query'),
     asyncHandler(controller.exportCsv));
+
+  // Warranty & Service KPIs (MTTR, SLA compliance, CSAT, First-Time-Fix) — read-only.
+  r.get('/kpis',
+    requirePermission(P.VIEW),
+    validate(kpiQuerySchema, 'query'),
+    asyncHandler(controller.kpis));
 
   r.get('/',
     requirePermission(P.VIEW),

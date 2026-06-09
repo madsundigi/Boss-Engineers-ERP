@@ -8,7 +8,8 @@ import { ListAllocationsDto, CapacityQueryDto } from './workload.dto';
 import { AllocationStatus, DEFAULT_DAILY_CAPACITY_HOURS } from './workload.constants';
 
 const ALLOC_COLS = `a.alloc_id, a.company_id, a.employee_id, e.full_name AS employee_name,
-  a.project_id, a.task_id, a.alloc_date, a.planned_hours, a.status, a.row_version`;
+  a.project_id, a.task_id, a.alloc_date, a.planned_hours, a.status,
+  a.ref_type, a.ref_id, a.row_version`;
 
 const TS_COLS = `t.ts_id, t.company_id, t.employee_id, e.full_name AS employee_name,
   t.period_start, t.period_end, t.status, t.submitted_at, t.approved_by, t.approved_at,
@@ -25,6 +26,8 @@ function mapAllocation(r: QueryResultRow): Allocation {
     allocDate: r.alloc_date,
     plannedHours: Number(r.planned_hours),
     status: r.status,
+    refType: r.ref_type ?? null,
+    refId: r.ref_id == null ? null : Number(r.ref_id),
     rowVersion: Number(r.row_version),
   };
 }
@@ -65,6 +68,8 @@ export interface CreateAllocationRow {
   taskId?: number;
   allocDate: string;
   plannedHours: number;
+  refType?: string;
+  refId?: number;
 }
 
 export interface CreateTimesheetLineRow {
@@ -119,17 +124,19 @@ export class WorkloadRepository {
       const res = await c.query(
         `WITH ins AS (
            INSERT INTO hcm.resource_allocation
-             (company_id, employee_id, project_id, task_id, alloc_date, planned_hours, status)
-           VALUES ($1,$2,$3,$4,$5,$6,'PLANNED')
+             (company_id, employee_id, project_id, task_id, alloc_date, planned_hours,
+              status, ref_type, ref_id)
+           VALUES ($1,$2,$3,$4,$5,$6,'PLANNED',$7,$8)
            RETURNING alloc_id, company_id, employee_id, project_id, task_id,
-                     alloc_date, planned_hours, status, row_version
+                     alloc_date, planned_hours, status, ref_type, ref_id, row_version
          )
          SELECT a.alloc_id, a.company_id, a.employee_id, e.full_name AS employee_name,
-                a.project_id, a.task_id, a.alloc_date, a.planned_hours, a.status, a.row_version
+                a.project_id, a.task_id, a.alloc_date, a.planned_hours, a.status,
+                a.ref_type, a.ref_id, a.row_version
            FROM ins a
            LEFT JOIN hcm.employee e ON e.employee_id = a.employee_id`,
         [ctx.companyId, data.employeeId, data.projectId, data.taskId ?? null,
-          data.allocDate, data.plannedHours],
+          data.allocDate, data.plannedHours, data.refType ?? null, data.refId ?? null],
       );
       return mapAllocation(res.rows[0]);
     });
@@ -190,10 +197,11 @@ export class WorkloadRepository {
               SET status = $1, row_version = row_version + 1
             WHERE alloc_id = $2 AND company_id = $3 AND row_version = $4
             RETURNING alloc_id, company_id, employee_id, project_id, task_id,
-                      alloc_date, planned_hours, status, row_version
+                      alloc_date, planned_hours, status, ref_type, ref_id, row_version
          )
          SELECT a.alloc_id, a.company_id, a.employee_id, e.full_name AS employee_name,
-                a.project_id, a.task_id, a.alloc_date, a.planned_hours, a.status, a.row_version
+                a.project_id, a.task_id, a.alloc_date, a.planned_hours, a.status,
+                a.ref_type, a.ref_id, a.row_version
            FROM upd a
            LEFT JOIN hcm.employee e ON e.employee_id = a.employee_id`,
         [status, id, ctx.companyId, expectedVersion],

@@ -5,7 +5,7 @@ import { Errors } from '../../common/http-error';
 import { RequestContext } from '../../common/request-context';
 import {
   CreateNcrDto, AddRcaDto, AddCapaDto, AddCapaActionDto, UpdateCapaStatusDto,
-  VersionDto, ListQueryDto,
+  VersionDto, ListQueryDto, ParetoQueryDto,
 } from './failure.dto';
 
 function ctxOf(req: Request): RequestContext {
@@ -23,6 +23,10 @@ export class FailureController {
 
   list = async (req: Request, res: Response) => {
     res.json(await this.service.list(ctxOf(req), valid<ListQueryDto>(req, 'query')));
+  };
+
+  pareto = async (req: Request, res: Response) => {
+    res.json(await this.service.pareto(ctxOf(req), valid<ParetoQueryDto>(req, 'query')));
   };
 
   create = async (req: Request, res: Response) => {

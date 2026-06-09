@@ -62,9 +62,14 @@ export const assignSchema = z.object({
 });
 export type AssignDto = z.infer<typeof assignSchema>;
 
-/** POST /api/service-tickets/:id/resolve — record the resolution + close the fix. */
+/**
+ * POST /api/service-tickets/:id/resolve — record the resolution + close the fix.
+ * `csatRating` (1..5) optionally captures the post-service customer-satisfaction
+ * score at resolution time; omit it to rate later (a future edit path).
+ */
 export const resolveSchema = z.object({
   resolution: t(4000).min(1, 'A resolution note is required'),
+  csatRating: z.coerce.number().int().min(1).max(5).optional(),
   rowVersion: z.coerce.number().int().positive(),
 });
 export type ResolveDto = z.infer<typeof resolveSchema>;
@@ -108,3 +113,21 @@ export const listQuerySchema = z.object({
   dir: z.enum(['asc', 'desc']).default('desc'),
 });
 export type ListQueryDto = z.infer<typeof listQuerySchema>;
+
+/**
+ * GET /api/service-tickets/kpis — optional window for the KPI roll-up. Either an
+ * explicit fromDate/toDate range OR a rolling windowDays (mutually independent;
+ * windowDays is resolved against "today" by the service). `toDate` must not
+ * precede `fromDate`. With no params, the KPIs cover the whole ticket history.
+ */
+export const kpiQuerySchema = z
+  .object({
+    fromDate: date.optional(),
+    toDate: date.optional(),
+    windowDays: z.coerce.number().int().min(1).max(3650).optional(),
+  })
+  .refine((q) => !(q.fromDate && q.toDate) || q.fromDate <= q.toDate, {
+    message: '`fromDate` must be on or before `toDate`',
+    path: ['toDate'],
+  });
+export type KpiQueryDto = z.infer<typeof kpiQuerySchema>;

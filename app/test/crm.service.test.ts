@@ -38,6 +38,7 @@ function makeRepo() {
     setStage: jest.fn(),
     softDeleteOpportunity: jest.fn(),
     pipelineSummary: jest.fn(),
+    revenueForecast: jest.fn(),
     createActivity: jest.fn(),
     findActivity: jest.fn(),
     listActivities: jest.fn(),
@@ -170,6 +171,59 @@ describe('CrmService', () => {
       const out = await service.pipelineSummary(ctx, 50);
       expect(out).toEqual(summary);
       expect(repo.pipelineSummary).toHaveBeenCalledWith(ctx, 50);
+    });
+  });
+
+  describe('revenueForecast (assembles the weighted pipeline)', () => {
+    it('folds per-stage parts into weightedTotal / grossOpenTotal and passes wonTotal through', async () => {
+      repo.revenueForecast.mockResolvedValue({
+        byStage: [
+          { stage: 'NEW', count: 2, gross: 100000, weighted: 20000 },        // 20% of 100k
+          { stage: 'PROPOSAL', count: 1, gross: 200000, weighted: 100000 },   // 50% of 200k
+          { stage: 'NEGOTIATION', count: 1, gross: 400000, weighted: 320000 }, // 80% of 400k
+        ],
+        byMonth: [
+          { month: '2026-09', count: 3, gross: 300000, weighted: 120000 },
+          { month: 'unscheduled', count: 1, gross: 400000, weighted: 320000 },
+        ],
+        wonTotal: 250000,
+      });
+
+      const out = await service.revenueForecast(ctx, {});
+
+      // grossOpenTotal = Σ gross; weightedTotal = Σ weighted (over open stages only).
+      expect(out.grossOpenTotal).toBe(700000);
+      expect(out.weightedTotal).toBe(440000);
+      expect(out.wonTotal).toBe(250000);
+      // breakdowns pass through unchanged.
+      expect(out.byStage).toHaveLength(3);
+      expect(out.byMonth).toEqual([
+        { month: '2026-09', count: 3, gross: 300000, weighted: 120000 },
+        { month: 'unscheduled', count: 1, gross: 400000, weighted: 320000 },
+      ]);
+      // no WON / LOST stage leaks into the open breakdown.
+      expect(out.byStage.some((s) => s.stage === 'WON' || s.stage === 'LOST')).toBe(false);
+      // the optional date window is threaded straight to the repository.
+      expect(repo.revenueForecast).toHaveBeenCalledWith(ctx, {});
+    });
+
+    it('returns zeros / empty arrays for a company with no opportunities', async () => {
+      repo.revenueForecast.mockResolvedValue({ byStage: [], byMonth: [], wonTotal: 0 });
+      const out = await service.revenueForecast(ctx, { fromDate: '2026-01-01', toDate: '2026-12-31' });
+      expect(out).toEqual({
+        weightedTotal: 0, grossOpenTotal: 0, wonTotal: 0, byStage: [], byMonth: [],
+      });
+      expect(repo.revenueForecast).toHaveBeenCalledWith(ctx, { fromDate: '2026-01-01', toDate: '2026-12-31' });
+    });
+
+    it('rounds weighted sums to 4 dp (no float drift from probability weighting)', async () => {
+      repo.revenueForecast.mockResolvedValue({
+        byStage: [{ stage: 'NEW', count: 1, gross: 100, weighted: 33.3333333333 }],
+        byMonth: [],
+        wonTotal: 0,
+      });
+      const out = await service.revenueForecast(ctx, {});
+      expect(out.weightedTotal).toBe(33.3333);
     });
   });
 

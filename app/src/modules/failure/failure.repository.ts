@@ -2,8 +2,8 @@ import { Pool, QueryResultRow } from 'pg';
 import { runInContext, runRead, Queryable } from '../../db/pool';
 import { emitOutbox, OutboxEventInput } from '../../outbox/outbox';
 import { RequestContext } from '../../common/request-context';
-import { Ncr, Rca, Capa, CapaAction, NcrListResult } from './failure.types';
-import { ListQueryDto } from './failure.dto';
+import { Ncr, Rca, Capa, CapaAction, NcrListResult, ParetoCount } from './failure.types';
+import { ListQueryDto, ParetoQueryDto } from './failure.dto';
 import { DOC_TYPE, NcrStatus, RcaMethod, CapaType, CapaStatus } from './failure.constants';
 
 /** Header columns of qms.ncr (bu_id added in migration 016; the rest exist in db/04). */
@@ -173,6 +173,52 @@ export class FailureRepository {
         `SELECT ${H} FROM qms.ncr WHERE ${w}
           ORDER BY ${q.sort} ${q.dir.toUpperCase()} LIMIT ${q.pageSize} OFFSET ${offset}`, params);
       return { rows: rows.rows.map(mapHeader), total, page: q.page, pageSize: q.pageSize };
+    });
+  }
+
+  /**
+   * Pareto / repeat-failure aggregation (READ-ONLY): one GROUP BY over qms.ncr for
+   * the chosen dimension, ordered by count DESC. Company-scoped (explicit
+   * company_id = $1 on top of RLS) and excludes soft-deleted rows; an optional
+   * raised_date window narrows the population. By failure mode it LEFT JOINs
+   * qms.failure_mode for fm_name (a NULL failure_mode_id stays a NULL key — the
+   * service buckets it as 'Unclassified'). For severity/source it groups on the
+   * column directly. Returns raw {key,label,count}; an empty company yields [].
+   */
+  async paretoCounts(ctx: RequestContext, q: ParetoQueryDto): Promise<ParetoCount[]> {
+    // The grouped key + label expression per dimension. Counts are computed in SQL;
+    // % and cumulative are derived in the service from this ordered list.
+    const dim = q.by === 'severity'
+      ? { key: 'n.severity', label: 'n.severity', join: '' }
+      : q.by === 'source'
+        ? { key: 'n.source', label: 'n.source', join: '' }
+        : {
+            key: 'n.failure_mode_id',
+            label: 'fm.fm_name',
+            join: 'LEFT JOIN qms.failure_mode fm ON fm.failure_mode_id = n.failure_mode_id',
+          };
+
+    const where: string[] = ['n.company_id = $1', 'NOT n.is_deleted'];
+    const params: unknown[] = [ctx.companyId];
+    if (q.fromDate) { params.push(q.fromDate); where.push(`n.raised_date >= $${params.length}`); }
+    if (q.toDate) { params.push(q.toDate); where.push(`n.raised_date <= $${params.length}`); }
+    const w = where.join(' AND ');
+
+    return runRead(this.pool, ctx, async (c) => {
+      const res = await c.query<{ key: string | null; label: string | null; cnt: string }>(
+        `SELECT ${dim.key} AS key, ${dim.label} AS label, count(*)::text AS cnt
+           FROM qms.ncr n
+           ${dim.join}
+          WHERE ${w}
+          GROUP BY ${dim.key}, ${dim.label}
+          ORDER BY count(*) DESC, ${dim.key} ASC NULLS LAST`,
+        params);
+      return res.rows.map((r) => ({
+        // failure_mode_id is numeric; severity/source are text. Normalise here.
+        key: r.key == null ? null : (q.by === 'mode' ? Number(r.key) : r.key),
+        label: r.label ?? '',
+        count: Number(r.cnt),
+      }));
     });
   }
 

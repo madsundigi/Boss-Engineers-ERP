@@ -1,4 +1,4 @@
-import { AllocationStatus, TimesheetStatus } from './workload.constants';
+import { AllocationStatus, AllocationRefType, TimesheetStatus } from './workload.constants';
 
 /** A persisted resource-allocation row (camelCase projection of hcm.resource_allocation). */
 export interface Allocation {
@@ -11,6 +11,10 @@ export interface Allocation {
   allocDate: string;
   plannedHours: number;
   status: AllocationStatus;
+  /** Optional downstream work item this allocation serves (with refId). Null if unlinked. */
+  refType: AllocationRefType | null;
+  /** Target row id in the {@link refType} work item's table. Null if unlinked. */
+  refId: number | null;
   rowVersion: number;
 }
 

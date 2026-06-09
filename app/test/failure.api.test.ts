@@ -205,4 +205,110 @@ d('Failure Analysis API (integration) — NCR -> RCA -> CAPA -> CLOSE, RBAC', ()
       expect(res.status).toBe(201);
     }
   });
+
+  describe('GET /api/ncrs/pareto — Pareto / repeat-failure report', () => {
+    // Three failure modes seeded with a known, ordered distribution: A x3, B x2, C x1.
+    // A & B (>=2) are repeat failures; C (1) is not. We assert on these specific modes
+    // (looked up by id) so the report is deterministic despite other NCRs in the company.
+    let modeA: number;
+    let modeB: number;
+    let modeC: number;
+
+    beforeAll(async () => {
+      const one = async (sql: string, params: unknown[] = []) => (await pool.query(sql, params)).rows[0];
+      const mode = async (code: string, name: string) => Number((await one(
+        `INSERT INTO qms.failure_mode (fm_code, fm_name, category)
+         VALUES ($1, $2, 'TEST')
+         ON CONFLICT (fm_code) DO UPDATE SET fm_name = EXCLUDED.fm_name
+         RETURNING failure_mode_id`, [code, name])).failure_mode_id);
+      modeA = await mode('PAR-A', 'Pareto Weld Crack');
+      modeB = await mode('PAR-B', 'Pareto Seal Leak');
+      modeC = await mode('PAR-C', 'Pareto Paint Defect');
+
+      // Seed NCRs directly (superuser bypasses RLS for setup). next_document_no needs
+      // the company+bu; these all sit in the seeded raised-date window below.
+      const seed = async (fmId: number, n: number) => {
+        for (let i = 0; i < n; i++) {
+          await pool.query(
+            `INSERT INTO qms.ncr (company_id, bu_id, ncr_no, source, project_id, failure_mode_id, raised_date, status)
+             VALUES ($1, $2, mdm.next_document_no($1,$2,'NCR'), 'PRODUCTION', $3, $4, DATE '2026-05-15', 'OPEN')`,
+            [companyId, buId, projectId, fmId]);
+        }
+      };
+      await seed(modeA, 3);
+      await seed(modeB, 2);
+      await seed(modeC, 1);
+    });
+
+    it('returns failure modes ordered by count DESC with correct pct/cumulative + repeat flags', async () => {
+      const res = await request(app).get('/api/ncrs/pareto?by=mode').set(hdr(qcUser));
+      expect(res.status).toBe(200);
+      expect(res.body.total).toBeGreaterThanOrEqual(6);
+      const { total, rows } = res.body;
+
+      const find = (id: number) => rows.find((r: { failureModeId: number | null }) => r.failureModeId === id);
+      const a = find(modeA);
+      const b = find(modeB);
+      const c = find(modeC);
+      expect(a).toBeDefined();
+      expect(b).toBeDefined();
+      expect(c).toBeDefined();
+
+      // Exact seeded counts + label + repeat flag (count >= 2).
+      expect(a).toMatchObject({ failureMode: 'Pareto Weld Crack', count: 3, isRepeat: true });
+      expect(b).toMatchObject({ failureMode: 'Pareto Seal Leak', count: 2, isRepeat: true });
+      expect(c).toMatchObject({ failureMode: 'Pareto Paint Defect', count: 1, isRepeat: false });
+
+      // Ordering is count DESC, so among our seeded modes A precedes B precedes C.
+      const idx = (id: number) => rows.findIndex((r: { failureModeId: number | null }) => r.failureModeId === id);
+      expect(idx(modeA)).toBeLessThan(idx(modeB));
+      expect(idx(modeB)).toBeLessThan(idx(modeC));
+
+      // pct = count/total*100 (rounded 2dp) against the report's own total.
+      expect(a.pct).toBeCloseTo(Math.round((3 / total) * 10000) / 100, 5);
+      // cumulativePct is non-decreasing down the list and the last row reaches ~100.
+      const cums = rows.map((r: { cumulativePct: number }) => r.cumulativePct);
+      for (let i = 1; i < cums.length; i++) expect(cums[i]).toBeGreaterThanOrEqual(cums[i - 1]);
+      expect(cums[cums.length - 1]).toBeCloseTo(100, 5);
+    });
+
+    it('honours the raised_date window (fromDate/toDate) to isolate the seeded modes', async () => {
+      // The seeded NCRs are all on 2026-05-15; a one-day window catches exactly them.
+      const res = await request(app)
+        .get('/api/ncrs/pareto?by=mode&fromDate=2026-05-15&toDate=2026-05-15')
+        .set(hdr(qcUser));
+      expect(res.status).toBe(200);
+      // Only our 6 seeded NCRs fall on that date -> total is exactly 6.
+      expect(res.body.total).toBe(6);
+      const ids = res.body.rows.map((r: { failureModeId: number | null }) => r.failureModeId);
+      expect(ids).toEqual([modeA, modeB, modeC]);
+      expect(res.body.rows.map((r: { count: number }) => r.count)).toEqual([3, 2, 1]);
+      expect(res.body.rows.map((r: { cumulativePct: number }) => r.cumulativePct)).toEqual([50, 83.33, 100]);
+    });
+
+    it('supports ?by=source (Pareto on the source dimension)', async () => {
+      const res = await request(app).get('/api/ncrs/pareto?by=source').set(hdr(qcUser));
+      expect(res.status).toBe(200);
+      expect(res.body.by).toBe('source');
+      // Our seed added 6 PRODUCTION NCRs; that bucket must be present and a repeat.
+      const prod = res.body.rows.find((r: { failureModeId: string | null }) => r.failureModeId === 'PRODUCTION');
+      expect(prod).toBeDefined();
+      expect(prod.count).toBeGreaterThanOrEqual(6);
+      expect(prod.isRepeat).toBe(true);
+    });
+
+    it('rejects an invalid dimension (400) and an inverted date window (400)', async () => {
+      const bad = await request(app).get('/api/ncrs/pareto?by=item').set(hdr(qcUser));
+      expect(bad.status).toBe(400);
+      const inv = await request(app)
+        .get('/api/ncrs/pareto?fromDate=2026-05-16&toDate=2026-05-15')
+        .set(hdr(qcUser));
+      expect(inv.status).toBe(400);
+    });
+
+    it('denies the report to a role without NCR_CAPA.VIEW (sales -> 403)', async () => {
+      const res = await request(app).get('/api/ncrs/pareto').set(hdr(salesUser));
+      expect(res.status).toBe(403);
+    });
+  });
 });

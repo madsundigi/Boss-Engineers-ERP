@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ALLOCATION_STATUS } from './workload.constants';
+import { ALLOCATION_STATUS, ALLOCATION_REF_TYPE } from './workload.constants';
 
 const id = z.coerce.number().int().positive();
 const isoDate = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected an ISO date (YYYY-MM-DD)');
@@ -12,7 +12,14 @@ export const createAllocationSchema = z.object({
   taskId: id.optional(),
   allocDate: isoDate,
   plannedHours: z.coerce.number().positive().max(24, 'Planned hours must be between 0 and 24'),
+  // Optional generic link to the downstream work item this allocation serves
+  // (Production work-order / FAT / Installation). Both-or-neither (see refine).
+  refType: z.enum(ALLOCATION_REF_TYPE).optional(),
+  refId: z.coerce.number().int().positive().optional(),
   // status is server-defaulted to PLANNED on create; not accepted from the client
+}).refine((d) => (d.refType == null) === (d.refId == null), {
+  message: 'refType and refId must be provided together',
+  path: ['refId'],
 });
 export type CreateAllocationDto = z.infer<typeof createAllocationSchema>;
 

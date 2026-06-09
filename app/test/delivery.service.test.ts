@@ -24,6 +24,8 @@ function makeRepo() {
     insert: jest.fn(),
     list: jest.fn(),
     findLatestForProject: jest.fn(),
+    projectExists: jest.fn(),
+    fetchRiskSignals: jest.fn(),
   } as unknown as jest.Mocked<DeliveryRepository>;
 }
 
@@ -121,6 +123,85 @@ describe('DeliveryService', () => {
       const out = await service.list(ctx, { projectId: 100, riskLevel: 'HIGH', page: 2, pageSize: 10 });
       expect(out).toBe(result);
       expect(repo.list).toHaveBeenCalledWith(ctx, { projectId: 100, riskLevel: 'HIGH', page: 2, pageSize: 10 });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // AUTO delivery-risk derivation. deriveRisk is a pure function (no I/O), so
+  // the GREEN/YELLOW/RED + driver rules are asserted directly; getProjectRisk
+  // is exercised against the fake repo for the 404 + signal-passthrough paths.
+  // -------------------------------------------------------------------------
+  describe('deriveRisk (pure GREEN/YELLOW/RED rule)', () => {
+    const sig = (po: number, wo: number, fat: number) => ({
+      overduePurchaseOrders: po, delayedWorkOrders: wo, pendingOrFailedFats: fat,
+    });
+
+    it('GREEN with null driver when all three signals are zero', () => {
+      expect(DeliveryService.deriveRisk(sig(0, 0, 0))).toEqual({ riskLevel: 'GREEN', driver: null });
+    });
+
+    it('YELLOW + MATERIAL for a lone overdue PO (below the RED bar)', () => {
+      expect(DeliveryService.deriveRisk(sig(1, 0, 0))).toEqual({ riskLevel: 'YELLOW', driver: 'MATERIAL' });
+    });
+
+    it('YELLOW + SCHEDULE for a lone delayed WO', () => {
+      expect(DeliveryService.deriveRisk(sig(0, 2, 0))).toEqual({ riskLevel: 'YELLOW', driver: 'SCHEDULE' });
+    });
+
+    it('YELLOW + MATERIAL when PO+WO=2 (one each, still under threshold 3)', () => {
+      // tie on count (1 vs 1): MATERIAL outranks SCHEDULE.
+      expect(DeliveryService.deriveRisk(sig(1, 1, 0))).toEqual({ riskLevel: 'YELLOW', driver: 'MATERIAL' });
+    });
+
+    it('RED + QUALITY whenever any FAT is pending/failed (even a single one)', () => {
+      expect(DeliveryService.deriveRisk(sig(0, 0, 1))).toEqual({ riskLevel: 'RED', driver: 'QUALITY' });
+    });
+
+    it('RED when overdue PO + delayed WO reach the threshold (3), driver = larger signal', () => {
+      expect(DeliveryService.deriveRisk(sig(2, 1, 0))).toEqual({ riskLevel: 'RED', driver: 'MATERIAL' });
+      expect(DeliveryService.deriveRisk(sig(1, 2, 0))).toEqual({ riskLevel: 'RED', driver: 'SCHEDULE' });
+    });
+
+    it('FAT dominates the driver when it is the largest signal in a RED', () => {
+      expect(DeliveryService.deriveRisk(sig(1, 1, 5))).toEqual({ riskLevel: 'RED', driver: 'QUALITY' });
+    });
+
+    it('breaks a 3-way tie (1/1/1) to QUALITY (and is RED because FAT>0)', () => {
+      expect(DeliveryService.deriveRisk(sig(1, 1, 1))).toEqual({ riskLevel: 'RED', driver: 'QUALITY' });
+    });
+  });
+
+  describe('getProjectRisk', () => {
+    it('404 when the project does not exist for the company', async () => {
+      repo.projectExists.mockResolvedValue(false);
+      await expect(code(service.getProjectRisk(ctx, 100))).resolves.toBe(404);
+      expect(repo.fetchRiskSignals).not.toHaveBeenCalled(); // short-circuits before the signal read
+    });
+
+    it('returns the derived risk + raw signals for an existing project', async () => {
+      repo.projectExists.mockResolvedValue(true);
+      repo.fetchRiskSignals.mockResolvedValue({
+        overduePurchaseOrders: 2, delayedWorkOrders: 1, pendingOrFailedFats: 0,
+      });
+      const out = await service.getProjectRisk(ctx, 100);
+      expect(repo.fetchRiskSignals).toHaveBeenCalledWith(ctx, 100);
+      expect(out).toMatchObject({
+        projectId: 100,
+        riskLevel: 'RED', // 2 + 1 >= 3
+        driver: 'MATERIAL',
+        signals: { overduePurchaseOrders: 2, delayedWorkOrders: 1, pendingOrFailedFats: 0 },
+      });
+      expect(typeof out.asOf).toBe('string');
+    });
+
+    it('maps an all-zero project to GREEN with a null driver', async () => {
+      repo.projectExists.mockResolvedValue(true);
+      repo.fetchRiskSignals.mockResolvedValue({
+        overduePurchaseOrders: 0, delayedWorkOrders: 0, pendingOrFailedFats: 0,
+      });
+      const out = await service.getProjectRisk(ctx, 100);
+      expect(out.riskLevel).toBe('GREEN');
+      expect(out.driver).toBeNull();
     });
   });
 });

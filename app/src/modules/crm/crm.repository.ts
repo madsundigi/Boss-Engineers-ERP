@@ -5,8 +5,9 @@ import { RequestContext } from '../../common/request-context';
 import {
   Opportunity, OpportunityListResult, PipelineStageSummary,
   Activity, ActivityListResult, Customer360,
+  ForecastStageRow, ForecastMonthRow,
 } from './crm.types';
-import { ListOpportunityQueryDto, ListActivityQueryDto } from './crm.dto';
+import { ListOpportunityQueryDto, ListActivityQueryDto, ForecastQueryDto } from './crm.dto';
 import { DOC_TYPE, OpportunityStage, ActivityStatus } from './crm.constants';
 
 /** Columns of crm.opportunity (created in migration 039). */
@@ -233,6 +234,69 @@ export class CrmRepository {
       return res.rows.map((r) => ({
         stage: r.stage as OpportunityStage, count: Number(r.n), totalEstValue: Number(r.v),
       }));
+    });
+  }
+
+  /**
+   * Revenue forecast aggregate parts (read-only). Returns the open pipeline broken
+   * down by stage and by expected-close month, plus the closed-won total — the
+   * service folds these into the top-level weighted / gross / won totals. All sums
+   * are company-scoped, exclude soft-deleted rows, and the optional [fromDate,toDate]
+   * window filters expected_close_date (inclusive) on EVERY part so the figures line
+   * up. weighted = SUM(est_value * probability_pct/100.0); 'open' = stage NOT IN
+   * (WON, LOST). Null close dates bucket under 'unscheduled'. COALESCE everywhere so
+   * an empty company yields empty arrays / a 0 won total without throwing.
+   */
+  async revenueForecast(
+    ctx: RequestContext, q: ForecastQueryDto,
+  ): Promise<{ byStage: ForecastStageRow[]; byMonth: ForecastMonthRow[]; wonTotal: number }> {
+    // Shared expected_close_date window, parameterised from $2 onward.
+    const range: string[] = [];
+    const params: unknown[] = [ctx.companyId];
+    if (q.fromDate) { params.push(q.fromDate); range.push(`expected_close_date >= $${params.length}::date`); }
+    if (q.toDate) { params.push(q.toDate); range.push(`expected_close_date <= $${params.length}::date`); }
+    const rangeSql = range.length ? `AND ${range.join(' AND ')}` : '';
+
+    return runRead(this.pool, ctx, async (c) => {
+      const byStage = (await c.query(
+        `SELECT stage,
+                count(*)::int                                        AS n,
+                COALESCE(sum(est_value), 0)::text                    AS gross,
+                COALESCE(sum(est_value * probability_pct / 100.0), 0)::text AS weighted
+           FROM crm.opportunity
+          WHERE company_id = $1 AND NOT is_deleted
+            AND stage NOT IN ('WON','LOST') ${rangeSql}
+          GROUP BY stage`, params)).rows.map((r) => ({
+        stage: r.stage as OpportunityStage,
+        count: Number(r.n),
+        gross: Number(r.gross),
+        weighted: Number(r.weighted),
+      }));
+
+      const byMonth = (await c.query(
+        `SELECT COALESCE(to_char(expected_close_date, 'YYYY-MM'), 'unscheduled') AS month,
+                count(*)::int                                        AS n,
+                COALESCE(sum(est_value), 0)::text                    AS gross,
+                COALESCE(sum(est_value * probability_pct / 100.0), 0)::text AS weighted
+           FROM crm.opportunity
+          WHERE company_id = $1 AND NOT is_deleted
+            AND stage NOT IN ('WON','LOST') ${rangeSql}
+          GROUP BY 1
+          ORDER BY min(expected_close_date) ASC NULLS LAST`, params)).rows.map((r) => ({
+        month: r.month as string,
+        count: Number(r.n),
+        gross: Number(r.gross),
+        weighted: Number(r.weighted),
+      }));
+
+      const won = await c.query(
+        `SELECT COALESCE(sum(est_value), 0)::text AS won
+           FROM crm.opportunity
+          WHERE company_id = $1 AND NOT is_deleted
+            AND stage = 'WON' ${rangeSql}`, params);
+      const wonTotal = Number(won.rows[0].won);
+
+      return { byStage, byMonth, wonTotal };
     });
   }
 

@@ -13,6 +13,7 @@ const LABELS: Record<string, string> = {
   openNcrs: 'Open NCRs',
   avgMarginPct: 'Avg Margin %',
   deliveryAtRisk: 'Delivery At-Risk',
+  criticalItems: 'Critical Items',
 };
 
 function fmt(key: string, v: unknown): string {

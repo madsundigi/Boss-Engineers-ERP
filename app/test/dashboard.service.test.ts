@@ -23,6 +23,7 @@ function parts(over: Partial<KpiParts> = {}): KpiParts {
     openNcrs: 5,
     avgMarginPct: 21.5,
     deliveryAtRisk: 1,
+    criticalItems: 3,
     ...over,
   };
 }
@@ -35,7 +36,7 @@ function zeroParts(): KpiParts {
     },
     activeProjects: { count: 0, orderBook: 0 },
     wipWorkOrders: 0, dispatchesMtd: 0, arOutstanding: 0, apOutstanding: 0,
-    openNcrs: 0, avgMarginPct: 0, deliveryAtRisk: 0,
+    openNcrs: 0, avgMarginPct: 0, deliveryAtRisk: 0, criticalItems: 0,
   };
 }
 
@@ -50,6 +51,7 @@ function makeRepo(): jest.Mocked<DashboardRepoLike> {
 const SCALAR_KEYS = [
   'activeProjects', 'orderBook', 'wipWorkOrders', 'dispatchesMtd',
   'arOutstanding', 'apOutstanding', 'openNcrs', 'avgMarginPct', 'deliveryAtRisk',
+  'criticalItems',
 ] as const;
 
 describe('DashboardService', () => {
@@ -126,8 +128,8 @@ describe('DashboardService', () => {
       const lines = csv.split('\n');
 
       expect(lines[0]).toBe('Metric,Value');
-      // header + 4 pipeline rows + 9 scalar rows = 14 lines
-      expect(lines).toHaveLength(14);
+      // header + 4 pipeline rows + 10 scalar rows = 15 lines
+      expect(lines).toHaveLength(15);
       expect(csv).toContain('"activeProjects","6"');
       expect(csv).toContain('"orderBook","250000"');
       expect(csv).toContain('"salesPipeline.openQuotationValue","7500"');
@@ -137,7 +139,7 @@ describe('DashboardService', () => {
     it('still produces a complete CSV (all zeros) for an empty company', async () => {
       repo.fetchKpiParts.mockResolvedValue(zeroParts());
       const csv = await service.exportKpisCsv(ctx);
-      expect(csv.split('\n')).toHaveLength(14);
+      expect(csv.split('\n')).toHaveLength(15);
       expect(csv).toContain('"deliveryAtRisk","0"');
     });
   });

@@ -5,7 +5,7 @@ import { valid } from '../../common/validate';
 import { CrmService } from './crm.service';
 import {
   CreateOpportunityDto, UpdateOpportunityDto, AdvanceStageDto, VersionDto, LoseDto,
-  ListOpportunityQueryDto, CreateActivityDto, ListActivityQueryDto,
+  ListOpportunityQueryDto, CreateActivityDto, ListActivityQueryDto, ForecastQueryDto,
 } from './crm.dto';
 
 function ctxOf(req: Request): RequestContext {
@@ -31,6 +31,9 @@ export class CrmController {
   pipelineSummary = async (req: Request, res: Response): Promise<void> => {
     const cid = req.query.customerId ? Number(req.query.customerId) : undefined;
     res.json(await this.svc.pipelineSummary(ctxOf(req), cid));
+  };
+  revenueForecast = async (req: Request, res: Response): Promise<void> => {
+    res.json(await this.svc.revenueForecast(ctxOf(req), valid<ForecastQueryDto>(req, 'query')));
   };
   exportCsv = async (req: Request, res: Response): Promise<void> => {
     const csv = await this.svc.exportCsv(ctxOf(req), valid<ListOpportunityQueryDto>(req, 'query'));

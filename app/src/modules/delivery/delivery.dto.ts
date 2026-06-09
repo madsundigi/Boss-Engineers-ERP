@@ -19,6 +19,15 @@ export const createForecastSchema = z.object({
 });
 export type CreateForecastDto = z.infer<typeof createForecastSchema>;
 
+/**
+ * GET /api/delivery-forecasts/risk/:projectId — path param for the AUTO
+ * delivery-risk derivation. projectId must be a positive integer.
+ */
+export const riskParamsSchema = z.object({
+  projectId: z.coerce.number().int().positive(),
+});
+export type RiskParamsDto = z.infer<typeof riskParamsSchema>;
+
 /** GET /api/delivery-forecasts — list filters + pagination (from the query string). */
 export const listQuerySchema = z.object({
   projectId: z.coerce.number().int().positive().optional(),

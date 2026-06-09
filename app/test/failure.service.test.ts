@@ -32,6 +32,7 @@ function makeRepo() {
     create: jest.fn(),
     findById: jest.fn(),
     list: jest.fn(),
+    paretoCounts: jest.fn(),
     addRca: jest.fn(),
     addCapa: jest.fn(),
     addCapaAction: jest.fn(),
@@ -69,6 +70,58 @@ describe('FailureService', () => {
     it('404 when not found', async () => {
       repo.findById.mockResolvedValue(null);
       await expect(code(service.getById(ctx, 99))).resolves.toBe(404);
+    });
+  });
+
+  describe('pareto — repeat-failure report math', () => {
+    it('computes pct + a running cumulativePct, preserves count-DESC order, flags repeats', async () => {
+      // Repo returns rows already ordered count DESC (its ORDER BY). total = 10.
+      repo.paretoCounts.mockResolvedValue([
+        { key: 1, label: 'Weld crack', count: 5 },
+        { key: 2, label: 'Seal leak', count: 3 },
+        { key: null, label: '', count: 2 }, // unclassified bucket
+      ]);
+      const out = await service.pareto(ctx, { by: 'mode' });
+
+      expect(out.by).toBe('mode');
+      expect(out.total).toBe(10);
+      // ordering preserved exactly as the repo handed them over
+      expect(out.rows.map((r) => r.failureModeId)).toEqual([1, 2, null]);
+      // pct = count/total*100
+      expect(out.rows.map((r) => r.pct)).toEqual([50, 30, 20]);
+      // cumulativePct is the running share and ends at exactly 100
+      expect(out.rows.map((r) => r.cumulativePct)).toEqual([50, 80, 100]);
+      // count >= 2 is a repeat failure (all three here)
+      expect(out.rows.map((r) => r.isRepeat)).toEqual([true, true, true]);
+      // NULL failure mode is bucketed as 'Unclassified'
+      expect(out.rows[2].failureMode).toBe('Unclassified');
+      expect(out.rows[0].failureMode).toBe('Weld crack');
+    });
+
+    it('marks a count of 1 as NOT a repeat and rounds pct/cumulative to 2dp', async () => {
+      // total = 3 -> shares are 66.666.. / 33.333.. ; assert 2dp rounding + repeat flag.
+      repo.paretoCounts.mockResolvedValue([
+        { key: 7, label: 'Bearing wear', count: 2 },
+        { key: 8, label: 'Paint defect', count: 1 },
+      ]);
+      const out = await service.pareto(ctx, { by: 'mode' });
+      expect(out.total).toBe(3);
+      expect(out.rows[0]).toMatchObject({ count: 2, pct: 66.67, cumulativePct: 66.67, isRepeat: true });
+      expect(out.rows[1]).toMatchObject({ count: 1, pct: 33.33, cumulativePct: 100, isRepeat: false });
+    });
+
+    it('returns { total: 0, rows: [] } for an empty company (no divide-by-zero)', async () => {
+      repo.paretoCounts.mockResolvedValue([]);
+      const out = await service.pareto(ctx, { by: 'mode' });
+      expect(out).toEqual({ by: 'mode', total: 0, rows: [] });
+    });
+
+    it('passes the chosen dimension through to the repo and echoes it', async () => {
+      repo.paretoCounts.mockResolvedValue([{ key: 'FAT', label: 'FAT', count: 1 }]);
+      const out = await service.pareto(ctx, { by: 'source' });
+      expect(repo.paretoCounts).toHaveBeenCalledWith(ctx, { by: 'source' });
+      expect(out.by).toBe('source');
+      expect(out.rows[0]).toMatchObject({ failureModeId: 'FAT', failureMode: 'FAT' });
     });
   });
 

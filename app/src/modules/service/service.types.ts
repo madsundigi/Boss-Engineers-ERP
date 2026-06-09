@@ -33,7 +33,9 @@ export interface ServiceTicket {
   isInWarranty: boolean;
   reportedAt: string;
   slaDueAt: string | null;
+  resolvedAt: string | null;
   resolution: string | null;
+  csatRating: number | null;
   status: ServiceTicketStatus;
   assignedEngineerId: number | null;
   createdAt: string;
@@ -60,4 +62,23 @@ export interface ServiceTicketListResult {
   total: number;
   page: number;
   pageSize: number;
+}
+
+/**
+ * Read-only Warranty & Service KPI summary (GET /api/service-tickets/kpis).
+ * Every field is a JS number (SQL casts NUMERIC -> float8, COALESCEd to 0) so a
+ * company with no tickets yields a fully-populated zero object, never null/NaN.
+ * `windowDays` echoes the requested rolling window (omitted when an explicit
+ * from/to range — or no filter — was used).
+ */
+export interface ServiceKpis {
+  windowDays?: number;       // rolling window in days, if ?windowDays was used
+  mttrHours: number;         // mean (resolved_at - reported_at) in hours, resolved tickets
+  slaCompliancePct: number;  // 100 * resolved-on-or-before-SLA / resolved-with-an-SLA
+  csatAvg: number;           // mean csat_rating (1..5) over rated tickets
+  csatCount: number;         // number of tickets that carry a csat_rating
+  firstTimeFixPct: number;   // 100 * resolved-with-exactly-one-visit / resolved
+  resolvedCount: number;     // tickets in status RESOLVED or CLOSED
+  openCount: number;         // tickets in any other (non-resolved) status
+  totalTickets: number;      // all (non-deleted) tickets in the window
 }
