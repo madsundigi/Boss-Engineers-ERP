@@ -130,6 +130,24 @@ const INCIDENT_TYPE = ['INJURY', 'NEARMISS', 'SPILL', 'FIRE', 'PROPERTY', 'OTHER
 const INCIDENT_SEVERITY = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 const BOM_TYPE = ['EBOM', 'MBOM']; // mirrors app bom.constants BOM_TYPE
 
+// Boss Engineers (induction heating / hardening, Ludhiana) — business pick-lists.
+// Stored as text, so 'Other'/custom values remain possible for one-off ETO jobs.
+const MACHINE_TYPE = ['Vertical Scanner', 'Horizontal Scanner', 'Customized Induction Hardening System',
+  'End/Bar Heater', 'Induction Billet Heater', 'Induction Brazing Machine', 'Induction Shrink-Fitting Machine',
+  'Induction Forging Machine', 'High-Frequency Induction Heater', 'Medium-Frequency Induction Heater',
+  'Radio-Frequency Induction Heater', 'Other'];
+const APPLICATION = ['Hardening', 'Forging', 'Tempering', 'Brazing', 'Billet Heating', 'Bar-End Heating',
+  'Shrink Fitting', 'Upsetting', 'Rolling/Extrusion', 'Other'];
+const INDUSTRY = ['Automotive', 'Textile', 'Agriculture', 'Forging', 'Other'];
+const PAYMENT_TERMS = ['100% Advance', '50% Advance + 50% before Dispatch',
+  '30% Advance + 60% before Dispatch + 10% after Commissioning',
+  '50% Advance + 40% on Dispatch + 10% after Installation', 'Against Delivery', '30-Day Credit', 'LC at Sight'];
+const DELIVERY_TERMS = ['Ex-Works (Ludhiana)', 'FOR Destination', 'Door Delivery', 'FOB', 'CIF', 'CIP'];
+const WARRANTY_TERMS = ['12 Months from Commissioning', '12 Months from Dispatch',
+  '18 Months Dispatch / 12 Commissioning', '24 Months from Commissioning', '6 Months', 'No Warranty'];
+const CURRENCY = ['INR', 'USD', 'EUR'];
+const UOM = ['NOS', 'SET', 'PAIR', 'KG', 'MTR', 'LOT'];
+
 /** Create-form field configs, keyed by resource path. Fields map 1:1 to the
  *  module's create DTO; FK references are entered as numeric ids (visible in
  *  their own list screens). Modules without an entry are list/view-only. */
@@ -139,9 +157,9 @@ export const FORMS: Record<string, FormField[]> = {
     { name: 'contact', label: 'Contact Person' },
     { name: 'mobile', label: 'Mobile' },
     { name: 'email', label: 'Email' },
-    { name: 'industry', label: 'Industry' },
-    { name: 'machineType', label: 'Machine Type' },
-    { name: 'application', label: 'Application' },
+    { name: 'industry', label: 'Industry', type: 'select', options: INDUSTRY },
+    { name: 'machineType', label: 'Machine Type', type: 'select', options: MACHINE_TYPE },
+    { name: 'application', label: 'Application', type: 'select', options: APPLICATION },
     { name: 'quantity', label: 'Quantity', type: 'number' },
     { name: 'budget', label: 'Budget', type: 'number' },
     { name: 'source', label: 'Source', type: 'select', options: ENQUIRY_SOURCE },
@@ -197,7 +215,7 @@ export const FORMS: Record<string, FormField[]> = {
   spares: [
     { name: 'partCode', label: 'Part Code', required: true },
     { name: 'partName', label: 'Part Name', required: true },
-    { name: 'uom', label: 'UoM' },
+    { name: 'uom', label: 'UoM', type: 'select', options: UOM },
     { name: 'unitPrice', label: 'Unit Price', type: 'number' },
     { name: 'reorderLevel', label: 'Reorder Level', type: 'number' },
   ],
@@ -215,14 +233,14 @@ export const FORMS: Record<string, FormField[]> = {
     { name: 'subject', label: 'Subject' },
     { name: 'contact', label: 'Contact Person' },
     { name: 'email', label: 'Email' },
-    { name: 'currencyCode', label: 'Currency Code', placeholder: 'INR' },
+    { name: 'currencyCode', label: 'Currency Code', type: 'select', options: CURRENCY },
     { name: 'validUntil', label: 'Valid Until', type: 'date' },
     { name: 'totalCost', label: 'Total Cost', type: 'number' },
     { name: 'discountPct', label: 'Discount %', type: 'number' },
     { name: 'taxPct', label: 'Tax %', type: 'number' },
-    { name: 'deliveryTerms', label: 'Delivery Terms' },
-    { name: 'paymentTerms', label: 'Payment Terms' },
-    { name: 'warrantyTerms', label: 'Warranty Terms' },
+    { name: 'deliveryTerms', label: 'Delivery Terms', type: 'select', options: DELIVERY_TERMS },
+    { name: 'paymentTerms', label: 'Payment Terms', type: 'select', options: PAYMENT_TERMS },
+    { name: 'warrantyTerms', label: 'Warranty Terms', type: 'select', options: WARRANTY_TERMS },
     { name: 'enquiryId', label: 'Enquiry ID', type: 'number' },
   ],
   invoices: [
