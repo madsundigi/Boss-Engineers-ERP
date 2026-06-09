@@ -398,6 +398,22 @@ export class ProcurementRepository {
           ctx.companyId, l.itemId, warehouseId, l.receivedQty, unitCost, projectId,
           grnId, ctx.userId,
         ]);
+
+      // Roll the receipt into the on-hand BALANCE (scm.item_stock), not just the
+      // ledger — otherwise the stock screen and availability never reflect goods
+      // received. Mirrors the inventory module's upsert (update-else-insert).
+      const bump = await c.query(
+        `UPDATE scm.item_stock SET qty_on_hand = qty_on_hand + $5, updated_at = now()
+           WHERE company_id = $1 AND item_id = $2 AND warehouse_id = $3
+             AND project_id IS NOT DISTINCT FROM $4 AND bin_id IS NULL AND batch_id IS NULL`,
+        [ctx.companyId, l.itemId, warehouseId, projectId, l.receivedQty]);
+      if (!bump.rowCount) {
+        await c.query(
+          `INSERT INTO scm.item_stock
+             (company_id, item_id, warehouse_id, project_id, qty_on_hand, avg_cost)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [ctx.companyId, l.itemId, warehouseId, projectId, l.receivedQty, unitCost]);
+      }
     }
   }
 

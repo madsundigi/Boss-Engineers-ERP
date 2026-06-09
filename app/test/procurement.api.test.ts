@@ -126,6 +126,14 @@ d('Procurement API (integration) — GRN posts inventory stock', () => {
     expect(Number(row.warehouse_id)).toBe(warehouseId);  // GRN warehouse
     expect(Number(row.ref_doc_id)).toBe(grnId);          // ties back to the GRN
     expect(Number(row.created_by)).toBe(storesUser);
+
+    // ...and it rolled into the on-hand BALANCE (scm.item_stock), not just the ledger,
+    // so the stock screen + material availability reflect the received goods.
+    const bal = await pool.query<{ on_hand: string }>(
+      `SELECT qty_on_hand AS on_hand FROM scm.item_stock
+        WHERE company_id=$1 AND item_id=$2 AND warehouse_id=$3`, [companyId, itemId, warehouseId]);
+    expect(bal.rowCount).toBeGreaterThan(0);
+    expect(Number(bal.rows[0].on_hand)).toBeGreaterThanOrEqual(RECEIVE_QTY);
   });
 
   it('denies receiving a GRN without GRN.CREATE (403) as sales_user', async () => {
