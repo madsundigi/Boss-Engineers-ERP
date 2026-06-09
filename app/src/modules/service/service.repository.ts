@@ -4,7 +4,7 @@ import { emitOutbox, OutboxEventInput } from '../../outbox/outbox';
 import { RequestContext } from '../../common/request-context';
 import {
   ServiceTicket, ServiceTicketDetail, FieldVisit, SpareIssue, ServiceTicketListResult,
-  WarrantyClaim, ServiceKpis,
+  WarrantyClaim, ServiceKpis, WarrantyCostReport,
 } from './service.types';
 import { ListQueryDto } from './service.dto';
 import { DOC_TYPE, ServiceTicketStatus, ClaimStatus } from './service.constants';
@@ -97,6 +97,13 @@ export type StatusPatch = Partial<Record<
 export interface KpiWindow {
   fromDate?: string; // YYYY-MM-DD inclusive lower bound on reported_at
   toDate?: string;   // YYYY-MM-DD inclusive upper bound on reported_at
+}
+
+/** Optional company-scoped window/filter for the Warranty Cost Analysis roll-up. */
+export interface WarrantyCostWindow {
+  fromDate?: string;       // YYYY-MM-DD inclusive lower bound on reported_at
+  toDate?: string;         // YYYY-MM-DD inclusive upper bound on reported_at
+  inWarrantyOnly?: boolean; // restrict to is_in_warranty tickets
 }
 
 export class ServiceRepository {
@@ -283,6 +290,115 @@ export class ServiceRepository {
         resolvedCount,
         openCount: total - resolvedCount,
         totalTickets: total,
+      };
+    });
+  }
+
+  /**
+   * Warranty Cost Analysis roll-up — READ-ONLY, company-scoped (RLS + explicit
+   * company_id), over the (non-deleted) ticket population. Sums the THREE warranty
+   * cost sources per ticket — field-visit travel cost, spare-part value
+   * (qty * unit_cost), and warranty-claim cost — exactly the fragments the
+   * ticket-detail serviceCost uses (plus claims). Each child is pre-aggregated to a
+   * per-ticket subtotal in its own subquery and LEFT JOINed so the 1-to-many child
+   * rows never Cartesian-multiply one another; every figure is COALESCEd to 0 so an
+   * empty company returns zero totals + empty breakdowns (never NULL / never throws).
+   *
+   * `byCustomer` lists the top cost drivers (totalCost desc) joined to
+   * mdm.customer for the name; `byMonth` buckets reported_at into 'YYYY-MM',
+   * ascending. An optional window bounds reported_at and/or restricts to
+   * is_in_warranty tickets.
+   */
+  async warrantyCost(ctx: RequestContext, window: WarrantyCostWindow = {}): Promise<WarrantyCostReport> {
+    return runRead(this.pool, ctx, async (c) => {
+      const params: unknown[] = [ctx.companyId];
+      let filter = '';
+      if (window.fromDate) {
+        params.push(window.fromDate);
+        filter += ` AND t.reported_at >= $${params.length}::date`;
+      }
+      if (window.toDate) {
+        params.push(window.toDate);
+        // inclusive upper bound on the calendar day
+        filter += ` AND t.reported_at < ($${params.length}::date + interval '1 day')`;
+      }
+      if (window.inWarrantyOnly) filter += ' AND t.is_in_warranty';
+      const scope = `t.company_id = $1 AND NOT t.is_deleted${filter}`;
+
+      // Per-ticket cost basis: each cost source is summed to a per-ticket subtotal
+      // in its own subquery (so the child fan-out never multiplies the others),
+      // then LEFT JOINed onto the in-scope ticket header.
+      const ticketCte = `
+        SELECT t.ticket_id, t.customer_id, t.is_in_warranty, t.reported_at,
+               COALESCE(fv.travel_cost, 0) AS travel_cost,
+               COALESCE(sp.spare_cost, 0)  AS spare_cost,
+               COALESCE(wc.claim_cost, 0)  AS claim_cost
+          FROM svc.service_ticket t
+          LEFT JOIN (SELECT ticket_id, SUM(travel_cost) AS travel_cost
+                       FROM svc.field_visit GROUP BY ticket_id) fv ON fv.ticket_id = t.ticket_id
+          LEFT JOIN (SELECT ticket_id, SUM(qty * unit_cost) AS spare_cost
+                       FROM svc.spare_issue GROUP BY ticket_id) sp ON sp.ticket_id = t.ticket_id
+          LEFT JOIN (SELECT ticket_id, SUM(claim_cost) AS claim_cost
+                       FROM svc.warranty_claim WHERE ticket_id IS NOT NULL GROUP BY ticket_id) wc
+                 ON wc.ticket_id = t.ticket_id
+         WHERE ${scope}`;
+
+      // Header totals — one row, always present, every figure COALESCEd to 0.
+      const totalsRow = (await c.query<{
+        tickets: string; in_warranty_tickets: string;
+        travel_cost: number; spare_cost: number; claim_cost: number; total_cost: number;
+      }>(
+        `SELECT
+            count(*)::text AS tickets,
+            count(*) FILTER (WHERE tc.is_in_warranty)::text AS in_warranty_tickets,
+            COALESCE(SUM(tc.travel_cost), 0)::float8 AS travel_cost,
+            COALESCE(SUM(tc.spare_cost), 0)::float8  AS spare_cost,
+            COALESCE(SUM(tc.claim_cost), 0)::float8  AS claim_cost,
+            COALESCE(SUM(tc.travel_cost + tc.spare_cost + tc.claim_cost), 0)::float8 AS total_cost
+           FROM (${ticketCte}) tc`, params)).rows[0];
+
+      // Top cost drivers by customer (desc); customer_name from mdm.customer.
+      const byCustomer = (await c.query<{
+        customer_id: string; customer_name: string | null; tickets: string; total_cost: number;
+      }>(
+        `SELECT tc.customer_id,
+                cu.customer_name,
+                count(*)::text AS tickets,
+                COALESCE(SUM(tc.travel_cost + tc.spare_cost + tc.claim_cost), 0)::float8 AS total_cost
+           FROM (${ticketCte}) tc
+           LEFT JOIN mdm.customer cu ON cu.customer_id = tc.customer_id
+          GROUP BY tc.customer_id, cu.customer_name
+          ORDER BY total_cost DESC, tc.customer_id ASC`, params)).rows.map((r) => ({
+        customerId: Number(r.customer_id),
+        customerName: r.customer_name,
+        tickets: Number(r.tickets),
+        totalCost: Number(r.total_cost),
+      }));
+
+      // Spend per reported_at month ('YYYY-MM'), chronological.
+      const byMonth = (await c.query<{ month: string; tickets: string; total_cost: number }>(
+        `SELECT to_char(tc.reported_at, 'YYYY-MM') AS month,
+                count(*)::text AS tickets,
+                COALESCE(SUM(tc.travel_cost + tc.spare_cost + tc.claim_cost), 0)::float8 AS total_cost
+           FROM (${ticketCte}) tc
+          GROUP BY 1
+          ORDER BY 1 ASC`, params)).rows.map((r) => ({
+        month: r.month,
+        tickets: Number(r.tickets),
+        totalCost: Number(r.total_cost),
+      }));
+
+      return {
+        totals: {
+          tickets: Number(totalsRow.tickets),
+          inWarrantyTickets: Number(totalsRow.in_warranty_tickets),
+          travelCost: Number(totalsRow.travel_cost),
+          spareCost: Number(totalsRow.spare_cost),
+          claimCost: Number(totalsRow.claim_cost),
+          totalCost: Number(totalsRow.total_cost),
+        },
+        byCustomer,
+        byMonth,
       };
     });
   }

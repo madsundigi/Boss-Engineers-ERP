@@ -143,18 +143,27 @@ export class ProductionService {
   }
 
   /**
-   * Complete the work order (WORK_ORDER.EDIT) with its as-built serials: only an
-   * IN_PROGRESS WO can be completed. For a serialized item the as-built list
-   * provides the unit serials (traceability genealogy). Emits 'workorder.completed'.
+   * Complete the work order (WORK_ORDER.EDIT) — the "Machine Completion → Serial
+   * No. Creation" step. Only an IN_PROGRESS WO can be completed. Each produced
+   * unit of the finished-goods item gets a serial in scm.serial_number (status
+   * WIP), linked to the WO via mfg.as_built for traceability; the serials are
+   * later shipped on Dispatch.
+   *
+   * The caller may supply an explicit as-built list (serial genealogy for a
+   * serialized item). When none is supplied we auto-generate one serial per
+   * produced unit (see {@link autoSerials}). The repository is idempotent on the
+   * WO, so a re-completion / retry never double-creates serials. Emits
+   * 'workorder.completed'.
    */
   async complete(ctx: RequestContext, id: number, dto: CompleteDto): Promise<WorkOrder> {
     const existing = await this.getById(ctx, id);
     if (existing.status !== 'IN_PROGRESS') {
       throw Errors.conflict(`Only an IN_PROGRESS work order can be completed (current: ${existing.status})`);
     }
-    const asBuilt = (dto.asBuilt ?? []).map((b) => ({
-      serialNo: b.serialNo, parentSerialNo: b.parentSerialNo,
-    }));
+    const supplied = dto.asBuilt ?? [];
+    const asBuilt = supplied.length > 0
+      ? supplied.map((b) => ({ serialNo: b.serialNo, parentSerialNo: b.parentSerialNo }))
+      : autoSerials(existing.woNo, existing.qty);
     const updated = await this.repo.complete(
       ctx, id, dto.rowVersion, existing.itemId, existing.projectId, asBuilt,
       {
@@ -202,4 +211,33 @@ export class ProductionService {
       [r.woNo, r.projectId, r.itemId, r.qty, r.status, r.plannedStart, r.plannedEnd, r.createdAt].map(esc).join(','));
     return [head.join(','), ...lines].join('\n');
   }
+}
+
+/** Hard cap on auto-generated serials per WO — a guard against a runaway qty. */
+const MAX_AUTO_SERIALS = 500;
+/** scm.serial_number.serial_no is VARCHAR(60); keep generated serials within it. */
+const SERIAL_NO_MAX = 60;
+
+/**
+ * "Serial No. Creation" — derive one serial per produced unit for a completed WO
+ * whose item is serialized but for which no explicit as-built list was supplied.
+ * Serials are `${woNo}-NNN` (1-based, zero-padded to 3), making each unit's WO of
+ * origin obvious and the set unique (the WO number is itself unique). Quantity is
+ * floored to a whole number of units (a fractional/zero qty still yields ≥ 1 unit)
+ * and capped at {@link MAX_AUTO_SERIALS}. The wo_no prefix is truncated if needed
+ * so the full serial stays within scm.serial_number.serial_no (VARCHAR(60)).
+ */
+export function autoSerials(woNo: string, qty: number): { serialNo: string }[] {
+  const units = Math.min(Math.max(Math.floor(qty), 1), MAX_AUTO_SERIALS);
+  // Suffix is "-NNN" for ≤999 units, widening only if the cap ever grows.
+  const width = Math.max(3, String(units).length);
+  const reserved = 1 + width; // '-' + sequence
+  const prefix = woNo.length + reserved > SERIAL_NO_MAX
+    ? woNo.slice(0, SERIAL_NO_MAX - reserved)
+    : woNo;
+  const out: { serialNo: string }[] = [];
+  for (let i = 1; i <= units; i++) {
+    out.push({ serialNo: `${prefix}-${String(i).padStart(width, '0')}` });
+  }
+  return out;
 }

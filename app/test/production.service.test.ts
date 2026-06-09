@@ -1,4 +1,4 @@
-import { ProductionService } from '../src/modules/production/production.service';
+import { ProductionService, autoSerials } from '../src/modules/production/production.service';
 import { ProductionRepository } from '../src/modules/production/production.repository';
 import { RequestContext } from '../src/common/request-context';
 import { WorkOrder } from '../src/modules/production/production.types';
@@ -157,7 +157,7 @@ describe('ProductionService', () => {
       repo.findById.mockResolvedValue(wo({ status: 'RELEASED' }));
       await expect(code(service.complete(ctx, 10, { rowVersion: 1 }))).resolves.toBe(409);
     });
-    it('completes an IN_PROGRESS WO with as-built serials and emits workorder.completed', async () => {
+    it('honours an explicitly supplied as-built list (serial genealogy)', async () => {
       repo.findById.mockResolvedValue(wo({ status: 'IN_PROGRESS' }));
       repo.complete.mockResolvedValue(wo({ status: 'COMPLETED', rowVersion: 3 }));
       const out = await service.complete(ctx, 10, { rowVersion: 2, asBuilt: [{ serialNo: 'SN-001' }] });
@@ -167,6 +167,30 @@ describe('ProductionService', () => {
       expect(projectId).toBe(100);
       expect(asBuilt).toEqual([{ serialNo: 'SN-001', parentSerialNo: undefined }]);
       expect(event).toMatchObject({ eventType: 'workorder.completed', aggregateType: 'WORK_ORDER', aggregateId: 10 });
+    });
+    it('auto-creates one serial per produced unit when none supplied (Serial No. Creation)', async () => {
+      // qty = 3 finished-goods units, no explicit as-built -> 3 serials derived from wo_no.
+      repo.findById.mockResolvedValue(wo({ status: 'IN_PROGRESS', qty: 3, woNo: 'WO/MUM/2026-27/000010' }));
+      repo.complete.mockResolvedValue(wo({ status: 'COMPLETED', rowVersion: 3 }));
+      await service.complete(ctx, 10, { rowVersion: 2 });
+      const [, , , itemId, projectId, asBuilt] = repo.complete.mock.calls[0];
+      expect(itemId).toBe(200);
+      expect(projectId).toBe(100);
+      expect(asBuilt).toEqual([
+        { serialNo: 'WO/MUM/2026-27/000010-001' },
+        { serialNo: 'WO/MUM/2026-27/000010-002' },
+        { serialNo: 'WO/MUM/2026-27/000010-003' },
+      ]);
+      // serial count is threaded into the completed event payload
+      const event = repo.complete.mock.calls[0][6];
+      expect(event).toMatchObject({ payload: { serials: 3 } });
+    });
+    it('floors a fractional qty and treats qty < 1 as a single unit', async () => {
+      repo.findById.mockResolvedValue(wo({ status: 'IN_PROGRESS', qty: 0.5, woNo: 'WO/X/1' }));
+      repo.complete.mockResolvedValue(wo({ status: 'COMPLETED', rowVersion: 3 }));
+      await service.complete(ctx, 10, { rowVersion: 2 });
+      const asBuilt = repo.complete.mock.calls[0][5];
+      expect(asBuilt).toEqual([{ serialNo: 'WO/X/1-001' }]);
     });
   });
 
@@ -204,6 +228,34 @@ describe('ProductionService', () => {
       expect(out.status).toBe('ON_HOLD');
       const patchArg = repo.updateStatus.mock.calls[0][4];
       expect(patchArg).toEqual({ delay_reason: 'Awaiting parts', percent_complete: 25 });
+    });
+  });
+
+  // "Serial No. Creation" generator — exercised directly for edge cases.
+  describe('autoSerials', () => {
+    it('generates exactly N serials, 1-based and zero-padded to 3', () => {
+      const out = autoSerials('WO/MUM/2026-27/000010', 5);
+      expect(out).toHaveLength(5);
+      expect(out[0].serialNo).toBe('WO/MUM/2026-27/000010-001');
+      expect(out[4].serialNo).toBe('WO/MUM/2026-27/000010-005');
+      // unique
+      expect(new Set(out.map((s) => s.serialNo)).size).toBe(5);
+    });
+    it('floors a fractional qty and yields at least one unit for qty < 1', () => {
+      expect(autoSerials('WO/X/1', 2.9)).toHaveLength(2);
+      expect(autoSerials('WO/X/1', 0.4)).toEqual([{ serialNo: 'WO/X/1-001' }]);
+      expect(autoSerials('WO/X/1', 0)).toEqual([{ serialNo: 'WO/X/1-001' }]);
+    });
+    it('caps the count so a runaway qty cannot explode (≤ 500)', () => {
+      expect(autoSerials('WO/X/1', 10_000)).toHaveLength(500);
+    });
+    it('keeps every serial within scm.serial_number.serial_no (VARCHAR(60))', () => {
+      const longWo = 'WO/' + 'A'.repeat(80); // far longer than 60
+      const out = autoSerials(longWo, 3);
+      expect(out).toHaveLength(3);
+      for (const s of out) expect(s.serialNo.length).toBeLessThanOrEqual(60);
+      // suffix is preserved (the wo_no prefix is what gets truncated)
+      expect(out[2].serialNo.endsWith('-003')).toBe(true);
     });
   });
 });

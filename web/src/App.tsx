@@ -9,6 +9,8 @@ import { ServiceKpisPage } from './pages/ServiceKpisPage';
 import { FailureParetoPage } from './pages/FailureParetoPage';
 import { RevenueForecastPage } from './pages/RevenueForecastPage';
 import { DeliveryRiskPage } from './pages/DeliveryRiskPage';
+import { WarrantyCostPage } from './pages/WarrantyCostPage';
+import { PlanningPage } from './pages/PlanningPage';
 import { UsersPage } from './pages/UsersPage';
 import { RolesPage } from './pages/RolesPage';
 
@@ -29,7 +31,9 @@ function AppRoutes() {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/search" element={<SearchPage />} />
+        <Route path="/planning" element={<PlanningPage />} />
         <Route path="/reports/service-kpis" element={<ServiceKpisPage />} />
+        <Route path="/reports/warranty-cost" element={<WarrantyCostPage />} />
         <Route path="/reports/pareto" element={<FailureParetoPage />} />
         <Route path="/reports/forecast" element={<RevenueForecastPage />} />
         <Route path="/reports/delivery-risk" element={<DeliveryRiskPage />} />

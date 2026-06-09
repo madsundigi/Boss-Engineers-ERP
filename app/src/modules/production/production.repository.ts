@@ -368,11 +368,17 @@ export class ProductionRepository {
   }
 
   /**
-   * Complete the WO: register each as-built serial (scm.serial_number, status
-   * INSTALLED is not implied — they leave production as WIP), link it via
-   * mfg.as_built, stamp actual_end, and move the WO to COMPLETED. A serial that
-   * already exists for the item is reused (idempotent on re-run). Returns null on
-   * a row-version mismatch.
+   * Complete the WO ("Machine Completion → Serial No. Creation"): move it to
+   * COMPLETED, stamp actual_end, and — for each produced unit — register a serial
+   * in scm.serial_number (status WIP; they leave production as work-in-progress
+   * and are later shipped on Dispatch), linked to this WO via mfg.as_built for
+   * traceability. A serial that already exists for the item is reused.
+   *
+   * Idempotent on the WO: if mfg.as_built already carries rows for this WO the
+   * serial creation is skipped entirely, so a re-completion / retry never
+   * double-creates serials. (scm.serial_number has no wo_id column — mfg.as_built
+   * is the WO→serial link, so it is the idempotency key.) Returns null on a
+   * row-version mismatch.
    */
   async complete(
     ctx: RequestContext, id: number, expectedVersion: number,
@@ -392,15 +398,20 @@ export class ProductionRepository {
         [ctx.userId, id, ctx.companyId, expectedVersion]);
       if (!res.rowCount) return null;
 
-      for (const b of asBuilt) {
-        const serialId = await this.ensureSerial(c, itemId, projectId, b.serialNo);
-        const parentId = b.parentSerialNo
-          ? await this.ensureSerial(c, itemId, projectId, b.parentSerialNo)
-          : null;
-        await c.query(
-          `INSERT INTO mfg.as_built (wo_id, serial_id, parent_serial_id)
-           VALUES ($1,$2,$3)`,
-          [id, serialId, parentId]);
+      // Idempotency guard: only create serials if none have been built for this WO.
+      const already = await c.query(
+        `SELECT 1 FROM mfg.as_built WHERE wo_id = $1 LIMIT 1`, [id]);
+      if (!already.rowCount) {
+        for (const b of asBuilt) {
+          const serialId = await this.ensureSerial(c, itemId, projectId, b.serialNo);
+          const parentId = b.parentSerialNo
+            ? await this.ensureSerial(c, itemId, projectId, b.parentSerialNo)
+            : null;
+          await c.query(
+            `INSERT INTO mfg.as_built (wo_id, serial_id, parent_serial_id)
+             VALUES ($1,$2,$3)`,
+            [id, serialId, parentId]);
+        }
       }
       if (event) await emitOutbox(c, event);
       return this.hydrate(c, mapHeader(res.rows[0]));

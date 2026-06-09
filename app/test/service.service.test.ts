@@ -34,6 +34,7 @@ function makeRepo() {
     findById: jest.fn(),
     list: jest.fn(),
     kpis: jest.fn(),
+    warrantyCost: jest.fn(),
     update: jest.fn(),
     updateStatus: jest.fn(),
     assign: jest.fn(),
@@ -262,6 +263,52 @@ describe('ServiceService', () => {
       const out = await service.kpis(ctx, { fromDate: '2026-05-01', windowDays: 7 });
       expect(out.windowDays).toBe(7);
       expect(repo.kpis).toHaveBeenCalledWith(ctx, { fromDate: '2026-05-01' });
+    });
+  });
+
+  describe('warrantyCost', () => {
+    const report = {
+      totals: {
+        tickets: 3, inWarrantyTickets: 2,
+        travelCost: 300, spareCost: 248, claimCost: 1500, totalCost: 2048,
+      },
+      byCustomer: [{ customerId: 50, customerName: 'Acme', tickets: 3, totalCost: 2048 }],
+      byMonth: [{ month: '2026-06', tickets: 3, totalCost: 2048 }],
+    };
+
+    it('passes the repo report through unchanged (no window)', async () => {
+      repo.warrantyCost.mockResolvedValue(report);
+      const out = await service.warrantyCost(ctx, {});
+      expect(out).toBe(report);
+      // no window keys derived when no filter requested
+      expect(repo.warrantyCost).toHaveBeenCalledWith(ctx, {});
+    });
+
+    it('threads an explicit fromDate/toDate window to the repo', async () => {
+      repo.warrantyCost.mockResolvedValue(report);
+      await service.warrantyCost(ctx, { fromDate: '2026-01-01', toDate: '2026-03-31' });
+      expect(repo.warrantyCost).toHaveBeenCalledWith(ctx, { fromDate: '2026-01-01', toDate: '2026-03-31' });
+    });
+
+    it('threads inWarrantyOnly=true to the repo window', async () => {
+      repo.warrantyCost.mockResolvedValue(report);
+      await service.warrantyCost(ctx, { inWarrantyOnly: true });
+      expect(repo.warrantyCost).toHaveBeenCalledWith(ctx, { inWarrantyOnly: true });
+    });
+
+    it('omits inWarrantyOnly when false (no filter)', async () => {
+      repo.warrantyCost.mockResolvedValue(report);
+      await service.warrantyCost(ctx, { inWarrantyOnly: false });
+      expect(repo.warrantyCost).toHaveBeenCalledWith(ctx, {});
+    });
+
+    it('surfaces the totals + breakdowns shape from the repo', async () => {
+      repo.warrantyCost.mockResolvedValue(report);
+      const out = await service.warrantyCost(ctx, {});
+      expect(out.totals.totalCost).toBe(2048);
+      expect(out.totals).toMatchObject({ travelCost: 300, spareCost: 248, claimCost: 1500 });
+      expect(out.byCustomer[0]).toMatchObject({ customerId: 50, totalCost: 2048 });
+      expect(out.byMonth[0].month).toBe('2026-06');
     });
   });
 

@@ -1,15 +1,15 @@
 import { Errors } from '../../common/http-error';
 import { RequestContext } from '../../common/request-context';
 import {
-  ServiceRepository, TicketHeaderInput, StatusPatch, KpiWindow,
+  ServiceRepository, TicketHeaderInput, StatusPatch, KpiWindow, WarrantyCostWindow,
 } from './service.repository';
 import {
   ServiceTicket, ServiceTicketDetail, ServiceTicketListResult, FieldVisit, SpareIssue,
-  WarrantyClaim, ServiceKpis,
+  WarrantyClaim, ServiceKpis, WarrantyCostReport,
 } from './service.types';
 import {
   CreateTicketDto, UpdateTicketDto, AssignDto, ResolveDto, CancelDto,
-  WarrantyClaimDto, ListQueryDto, KpiQueryDto,
+  WarrantyClaimDto, ListQueryDto, KpiQueryDto, WarrantyCostQueryDto,
 } from './service.dto';
 import {
   canTransition, TERMINAL_STATUSES, ServiceTicketStatus,
@@ -82,6 +82,21 @@ export class ServiceService {
     }
     const kpis = await this.repo.kpis(ctx, window);
     return query.windowDays !== undefined ? { windowDays: query.windowDays, ...kpis } : kpis;
+  }
+
+  /**
+   * Warranty Cost Analysis — read-only roll-up of warranty/after-sales spend
+   * (travel + spares + claim cost) so management can analyse the cost of warranty
+   * service. The optional reported_at window + inWarrantyOnly filter pass straight
+   * through to the repo aggregate; the result is fully zero-filled for an empty
+   * company (the repo COALESCEs every figure).
+   */
+  warrantyCost(ctx: RequestContext, query: WarrantyCostQueryDto): Promise<WarrantyCostReport> {
+    const window: WarrantyCostWindow = {};
+    if (query.fromDate) window.fromDate = query.fromDate;
+    if (query.toDate) window.toDate = query.toDate;
+    if (query.inWarrantyOnly) window.inWarrantyOnly = true;
+    return this.repo.warrantyCost(ctx, window);
   }
 
   async update(ctx: RequestContext, id: number, dto: UpdateTicketDto): Promise<ServiceTicket> {

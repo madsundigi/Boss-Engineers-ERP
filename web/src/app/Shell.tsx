@@ -42,6 +42,10 @@ export function Shell({ children }: { children: ReactNode }) {
           className={({ isActive }) => 'erp-nav__item' + (isActive ? ' is-active' : '')}>
           <span className="erp-nav__icon">▤</span> Dashboard
         </NavLink>
+        <NavLink to="/planning"
+          className={({ isActive }) => 'erp-nav__item' + (isActive ? ' is-active' : '')}>
+          <span className="erp-nav__icon">▤</span> Planning (Gantt)
+        </NavLink>
         {SECTIONS.map((section) => (
           <div key={section.label}>
             <div className="erp-nav__section">{section.label}</div>
@@ -61,6 +65,7 @@ export function Shell({ children }: { children: ReactNode }) {
             ['/reports/pareto', 'Failure Pareto'],
             ['/reports/forecast', 'Revenue Forecast'],
             ['/reports/delivery-risk', 'Delivery Risk'],
+            ['/reports/warranty-cost', 'Warranty Cost'],
           ].map(([to, label]) => (
             <NavLink key={to} to={to}
               className={({ isActive }) => 'erp-nav__item' + (isActive ? ' is-active' : '')}>

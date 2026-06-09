@@ -9,7 +9,7 @@ import { ServiceController } from './service.controller';
 import { SERVICE_PERMS } from './service.constants';
 import {
   createTicketSchema, updateTicketSchema, assignSchema, resolveSchema, cancelSchema,
-  warrantyClaimSchema, versionSchema, listQuerySchema, kpiQuerySchema,
+  warrantyClaimSchema, versionSchema, listQuerySchema, kpiQuerySchema, warrantyCostQuerySchema,
 } from './service.dto';
 
 /** Compose the Warranty & Service module (repository -> service -> controller) and routes. */
@@ -29,6 +29,13 @@ export function serviceRouter(pool: Pool): Router {
     requirePermission(P.VIEW),
     validate(kpiQuerySchema, 'query'),
     asyncHandler(controller.kpis));
+
+  // Warranty Cost Analysis — warranty/after-sales spend roll-up (travel + spares +
+  // claim cost) by customer + month — read-only. Static GET, precedes '/:id'.
+  r.get('/warranty-cost',
+    requirePermission(P.VIEW),
+    validate(warrantyCostQuerySchema, 'query'),
+    asyncHandler(controller.warrantyCost));
 
   r.get('/',
     requirePermission(P.VIEW),

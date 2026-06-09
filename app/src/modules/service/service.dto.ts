@@ -132,3 +132,22 @@ export const kpiQuerySchema = z
     path: ['toDate'],
   });
 export type KpiQueryDto = z.infer<typeof kpiQuerySchema>;
+
+/**
+ * GET /api/service-tickets/warranty-cost — optional reported_at date window for the
+ * Warranty Cost Analysis roll-up. `fromDate`/`toDate` (inclusive, YYYY-MM-DD) bound
+ * the ticket population; `inWarrantyOnly=true` restricts to is_in_warranty tickets.
+ * With no params the report covers the whole ticket history. `toDate` must not
+ * precede `fromDate`.
+ */
+export const warrantyCostQuerySchema = z
+  .object({
+    fromDate: date.optional(),
+    toDate: date.optional(),
+    inWarrantyOnly: z.coerce.boolean().optional(),
+  })
+  .refine((q) => !(q.fromDate && q.toDate) || q.fromDate <= q.toDate, {
+    message: '`fromDate` must be on or before `toDate`',
+    path: ['toDate'],
+  });
+export type WarrantyCostQueryDto = z.infer<typeof warrantyCostQuerySchema>;

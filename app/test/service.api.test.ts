@@ -398,4 +398,155 @@ d('Service Ticket API (integration) — lifecycle, warranty claim, RBAC', () => 
       expect(res.status).toBe(403);
     });
   });
+
+  describe('GET /warranty-cost — Warranty Cost Analysis', () => {
+    // Isolated throwaway company so the warranty-spend math is exact and untouched
+    // by the lifecycle/KPI tickets above. We INSERT directly (owner connection, RLS
+    // bypassed) so travel_cost / spare value / claim_cost are fully controlled, then
+    // read back through the HTTP stack as erp_app scoped to this company_id.
+    let wCompanyId: number;
+    let wBuId: number;
+    let wCustomerId: number;
+    let wSerialId: number;
+    let wProjectId: number;
+    let wWarrantyId: number;
+
+    const whdr = () => ({
+      'x-user-id': String(serviceUser),
+      'x-company-id': String(wCompanyId),
+      'x-bu-id': String(wBuId),
+    });
+
+    beforeAll(async () => {
+      const one = async (sql: string, params: unknown[] = []) => (await pool.query(sql, params)).rows[0];
+      const currencyId = Number((await one(`SELECT currency_id FROM mdm.currency WHERE iso_code='INR'`)).currency_id);
+      wCompanyId = Number((await one(
+        `INSERT INTO mdm.company (company_code, legal_name, base_currency_id)
+         VALUES ('SVCWC', 'Service WCost Co', $1)
+         ON CONFLICT (company_code) DO UPDATE SET legal_name = EXCLUDED.legal_name
+         RETURNING company_id`, [currencyId])).company_id);
+      wBuId = Number((await one(
+        `INSERT INTO mdm.business_unit (company_id, bu_code, bu_name)
+         VALUES ($1, 'WC', 'WCost Branch')
+         ON CONFLICT (company_id, bu_code) DO UPDATE SET bu_name = EXCLUDED.bu_name
+         RETURNING bu_id`, [wCompanyId])).bu_id);
+      wCustomerId = Number((await one(
+        `INSERT INTO mdm.customer (company_id, customer_code, customer_name, default_currency_id)
+         VALUES ($1, 'WC-CUST', 'WCost Customer', $2)
+         ON CONFLICT (customer_code) DO UPDATE SET customer_name = EXCLUDED.customer_name
+         RETURNING customer_id`, [wCompanyId, currencyId])).customer_id);
+      wProjectId = Number((await one(
+        `INSERT INTO proj.project (company_id, project_no, project_name, customer_id, pm_user_id, status)
+         VALUES ($1, 'PRJ-WC-TEST', 'WCost Test Project', $2, $3, 'ACTIVE')
+         ON CONFLICT (project_no) DO UPDATE SET project_name = EXCLUDED.project_name
+         RETURNING project_id`, [wCompanyId, wCustomerId, serviceUser])).project_id);
+      // Reuse the seeded ITEM-TEST item (item_id need not belong to wCompanyId) for
+      // the serial + spares so we avoid item_category/uom FK plumbing here.
+      wSerialId = Number((await one(
+        `INSERT INTO scm.serial_number (item_id, serial_no, project_id, status)
+         VALUES ($1, 'SN-WC-TEST', $2, 'INSTALLED')
+         ON CONFLICT (item_id, serial_no) DO UPDATE SET status = EXCLUDED.status
+         RETURNING serial_id`, [itemId, wProjectId])).serial_id);
+      wWarrantyId = Number((await one(
+        `INSERT INTO svc.warranty (company_id, serial_id, project_id, customer_id, start_date, end_date, status)
+         VALUES ($1, $2, $3, $4, current_date - 30, current_date + 335, 'ACTIVE')
+         ON CONFLICT (serial_id) DO UPDATE SET end_date = EXCLUDED.end_date
+         RETURNING warranty_id`, [wCompanyId, wSerialId, wProjectId, wCustomerId])).warranty_id);
+
+      // Clean any rows from a previous run so figures are exact.
+      await pool.query(`DELETE FROM svc.warranty_claim WHERE ticket_id IN
+         (SELECT ticket_id FROM svc.service_ticket WHERE company_id = $1)`, [wCompanyId]);
+      await pool.query(`DELETE FROM svc.field_visit WHERE ticket_id IN
+         (SELECT ticket_id FROM svc.service_ticket WHERE company_id = $1)`, [wCompanyId]);
+      await pool.query(`DELETE FROM svc.spare_issue WHERE ticket_id IN
+         (SELECT ticket_id FROM svc.service_ticket WHERE company_id = $1)`, [wCompanyId]);
+      await pool.query(`DELETE FROM svc.service_ticket WHERE company_id = $1`, [wCompanyId]);
+
+      // One in-warranty ticket reported this month with:
+      //   travel: two visits 150 + 250            = 400
+      //   spares: 2*99 + 1*50                      = 248
+      //   claim : one APPROVED warranty_claim      = 1500
+      //   totalCost                                = 2148
+      const ticketId = Number((await pool.query(
+        `INSERT INTO svc.service_ticket
+           (company_id, bu_id, ticket_no, customer_id, serial_id, warranty_id,
+            priority, is_in_warranty, reported_at, status)
+         VALUES ($1, $2, 'WC-TKT-1', $3, $4, $5, 'MED', true, now(), 'RESOLVED')
+         RETURNING ticket_id`,
+        [wCompanyId, wBuId, wCustomerId, wSerialId, wWarrantyId])).rows[0].ticket_id);
+      await pool.query(
+        `INSERT INTO svc.field_visit (ticket_id, visit_date, travel_cost)
+         VALUES ($1, current_date, 150), ($1, current_date, 250)`, [ticketId]);
+      await pool.query(
+        `INSERT INTO svc.spare_issue (ticket_id, item_id, qty, unit_cost, is_chargeable)
+         VALUES ($1, $2, 2, 99, true), ($1, $2, 1, 50, false)`, [ticketId, itemId]);
+      await pool.query(
+        `INSERT INTO svc.warranty_claim (warranty_id, ticket_id, claim_cost, status, approved_by)
+         VALUES ($1, $2, 1500, 'APPROVED', $3)`, [wWarrantyId, ticketId, serviceUser]);
+
+      // A second, out-of-warranty ticket with no costs (counts toward `tickets`).
+      await pool.query(
+        `INSERT INTO svc.service_ticket
+           (company_id, bu_id, ticket_no, customer_id, priority, is_in_warranty, reported_at, status)
+         VALUES ($1, $2, 'WC-TKT-2', $3, 'MED', false, now(), 'OPEN')`,
+        [wCompanyId, wBuId, wCustomerId]);
+    });
+
+    it('sums travel + spares + claim cost into totals and byCustomer', async () => {
+      const res = await request(app).get('/api/service-tickets/warranty-cost').set(whdr());
+      expect(res.status).toBe(200);
+      const { totals, byCustomer, byMonth } = res.body;
+      // Counts: 2 tickets, 1 in warranty.
+      expect(totals.tickets).toBe(2);
+      expect(totals.inWarrantyTickets).toBe(1);
+      // Cost components.
+      expect(totals.travelCost).toBeCloseTo(400, 4);
+      expect(totals.spareCost).toBeCloseTo(248, 4);
+      expect(totals.claimCost).toBeCloseTo(1500, 4);
+      expect(totals.totalCost).toBeCloseTo(400 + 248 + 1500, 4); // 2148
+      // byCustomer reflects the same total against our seeded customer.
+      const cust = byCustomer.find((r: { customerId: number }) => r.customerId === wCustomerId);
+      expect(cust).toBeDefined();
+      expect(cust.customerName).toBe('WCost Customer');
+      expect(cust.tickets).toBe(2);
+      expect(cust.totalCost).toBeCloseTo(2148, 4);
+      // byMonth buckets reported_at -> this month, carrying the full spend.
+      const ym = new Date().toISOString().slice(0, 7);
+      const month = byMonth.find((m: { month: string }) => m.month === ym);
+      expect(month).toBeDefined();
+      expect(month.totalCost).toBeCloseTo(2148, 4);
+    });
+
+    it('restricts to is_in_warranty tickets with inWarrantyOnly=true', async () => {
+      const res = await request(app).get('/api/service-tickets/warranty-cost?inWarrantyOnly=true').set(whdr());
+      expect(res.status).toBe(200);
+      // Only the in-warranty ticket remains; the full cost is on it.
+      expect(res.body.totals.tickets).toBe(1);
+      expect(res.body.totals.inWarrantyTickets).toBe(1);
+      expect(res.body.totals.totalCost).toBeCloseTo(2148, 4);
+    });
+
+    it('returns zero totals + empty breakdowns for a company with no tickets', async () => {
+      await pool.query(`DELETE FROM svc.warranty_claim WHERE ticket_id IN
+         (SELECT ticket_id FROM svc.service_ticket WHERE company_id = $1)`, [wCompanyId]);
+      await pool.query(`DELETE FROM svc.field_visit WHERE ticket_id IN
+         (SELECT ticket_id FROM svc.service_ticket WHERE company_id = $1)`, [wCompanyId]);
+      await pool.query(`DELETE FROM svc.spare_issue WHERE ticket_id IN
+         (SELECT ticket_id FROM svc.service_ticket WHERE company_id = $1)`, [wCompanyId]);
+      await pool.query(`DELETE FROM svc.service_ticket WHERE company_id = $1`, [wCompanyId]);
+      const res = await request(app).get('/api/service-tickets/warranty-cost').set(whdr());
+      expect(res.status).toBe(200);
+      expect(res.body.totals).toMatchObject({
+        tickets: 0, inWarrantyTickets: 0, travelCost: 0, spareCost: 0, claimCost: 0, totalCost: 0,
+      });
+      expect(res.body.byCustomer).toEqual([]);
+      expect(res.body.byMonth).toEqual([]);
+    });
+
+    it('denies /warranty-cost without SERVICE_TICKET.VIEW (stores -> 403)', async () => {
+      const res = await request(app).get('/api/service-tickets/warranty-cost')
+        .set({ 'x-user-id': String(storesUser), 'x-company-id': String(wCompanyId), 'x-bu-id': String(wBuId) });
+      expect(res.status).toBe(403);
+    });
+  });
 });
