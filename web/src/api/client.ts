@@ -43,11 +43,21 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) {
-    throw {
-      status: res.status,
-      message: (data && (data.message || data.error)) || res.statusText,
-      details: data,
-    } as ApiError;
+    // API errors are enveloped as { error: { code, message, details } }; some
+    // paths return a bare { message } or { error: "..." }. Extract a readable
+    // string, and flatten zod field errors (details.fieldErrors) into
+    // "field: message" lines so the user sees WHICH field failed.
+    const env = (data && data.error) || data || {};
+    let message: string =
+      typeof env === 'string' ? env : env.message || res.statusText || 'Request failed';
+    const fieldErrors = env && env.details && env.details.fieldErrors;
+    if (fieldErrors && typeof fieldErrors === 'object') {
+      const parts = Object.entries(fieldErrors as Record<string, string[]>)
+        .filter(([, v]) => Array.isArray(v) && v.length > 0)
+        .map(([field, msgs]) => `${field}: ${msgs.join(', ')}`);
+      if (parts.length) message = parts.join(' · ');
+    }
+    throw { status: res.status, message, details: data } as ApiError;
   }
   return data as T;
 }
