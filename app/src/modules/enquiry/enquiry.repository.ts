@@ -7,6 +7,8 @@ import { DOC_TYPE, EnquiryStatus } from './enquiry.constants';
 
 const COLS = `enquiry_id, enquiry_no, company_id, bu_id, customer_name,
   contact_person AS contact, email, address, industry, source, requirement,
+  mobile, machine_type, application, quantity, budget, sales_executive,
+  follow_up_date, remarks,
   status, created_at, created_by, updated_at, row_version`;
 
 function mapRow(r: QueryResultRow): Enquiry {
@@ -22,6 +24,14 @@ function mapRow(r: QueryResultRow): Enquiry {
     industry: r.industry,
     source: r.source,
     requirement: r.requirement,
+    mobile: r.mobile,
+    machineType: r.machine_type,
+    application: r.application,
+    quantity: r.quantity == null ? null : Number(r.quantity),
+    budget: r.budget == null ? null : Number(r.budget),
+    salesExecutive: r.sales_executive,
+    followUpDate: r.follow_up_date,
+    remarks: r.remarks,
     status: r.status,
     createdAt: r.created_at,
     createdBy: r.created_by == null ? null : Number(r.created_by),
@@ -38,6 +48,14 @@ export interface CreateEnquiryRow {
   industry?: string;
   source?: string;
   requirement?: string;
+  mobile?: string;
+  machineType?: string;
+  application?: string;
+  quantity?: number;
+  budget?: number;
+  salesExecutive?: string;
+  followUpDate?: string;
+  remarks?: string;
 }
 
 export class EnquiryRepository {
@@ -49,14 +67,19 @@ export class EnquiryRepository {
       const res = await client.query(
         `INSERT INTO sales.enquiry
            (company_id, bu_id, enquiry_no, customer_name, contact_person, email,
-            address, industry, source, requirement, status, created_by)
+            address, industry, source, requirement, mobile, machine_type,
+            application, quantity, budget, sales_executive, follow_up_date,
+            remarks, status, created_by)
          VALUES ($1,$2, mdm.next_document_no($1,$2,'${DOC_TYPE}'),
-                 $3,$4,$5,$6,$7,$8,$9,'NEW',$10)
+                 $3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'NEW',$18)
          RETURNING ${COLS}`,
         [
           ctx.companyId, ctx.buId, data.customerName, data.contact ?? null,
           data.email ?? null, data.address ?? null, data.industry ?? null,
-          data.source ?? null, data.requirement ?? null, ctx.userId,
+          data.source ?? null, data.requirement ?? null, data.mobile ?? null,
+          data.machineType ?? null, data.application ?? null, data.quantity ?? null,
+          data.budget ?? null, data.salesExecutive ?? null, data.followUpDate ?? null,
+          data.remarks ?? null, ctx.userId,
         ],
       );
       return mapRow(res.rows[0]);
@@ -121,6 +144,14 @@ export class EnquiryRepository {
     if (fields.industry !== undefined) add('industry', fields.industry);
     if (fields.source !== undefined) add('source', fields.source);
     if (fields.requirement !== undefined) add('requirement', fields.requirement);
+    if (fields.mobile !== undefined) add('mobile', fields.mobile);
+    if (fields.machineType !== undefined) add('machine_type', fields.machineType);
+    if (fields.application !== undefined) add('application', fields.application);
+    if (fields.quantity !== undefined) add('quantity', fields.quantity);
+    if (fields.budget !== undefined) add('budget', fields.budget);
+    if (fields.salesExecutive !== undefined) add('sales_executive', fields.salesExecutive);
+    if (fields.followUpDate !== undefined) add('follow_up_date', fields.followUpDate);
+    if (fields.remarks !== undefined) add('remarks', fields.remarks);
     add('updated_by', ctx.userId);
 
     return runInContext(this.pool, ctx, async (client) => {

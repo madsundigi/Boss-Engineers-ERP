@@ -43,6 +43,7 @@ import { usersRouter, rolesRouter } from './modules/users/users.routes';
 import { documentRouter } from './modules/dms/dms.routes';
 import { crmRouter } from './modules/crm/crm.routes';
 import { portalRouter } from './modules/portal/portal.routes';
+import { searchRouter } from './modules/search/search.routes';
 import {
   invoicePostedGlHandler, paymentReceivedGlHandler, vendorInvoiceApprovedGlHandler,
 } from './modules/gl/gl.handlers';
@@ -126,6 +127,7 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
   app.use('/api/documents', documentRouter(pool)); // DMS (versioned document repository)
   app.use('/api/crm', crmRouter(pool));            // CRM pipeline + activities
   app.use('/api/portal', portalRouter(pool));      // customer/vendor self-service portal
+  app.use('/api/search', searchRouter(pool));      // central cross-entity search (lifecycle traceability)
 
   // Transactional outbox relay: dispatches committed domain events (e.g. emails
   // the quotation PDF on 'quotation.sent'). Exposed for the server poller and tests.

@@ -12,8 +12,9 @@ const ctx: RequestContext = {
 const sample: Enquiry = {
   enquiryId: 10, enquiryNo: 'ENQ/MUM/2026-27/000010', companyId: 1, buId: 1,
   customerName: 'Acme', contact: null, email: null, address: null, industry: null,
-  source: null, requirement: null, status: 'NEW', createdAt: 't', createdBy: 1,
-  updatedAt: 't', rowVersion: 1,
+  source: null, requirement: null, mobile: null, machineType: null, application: null,
+  quantity: null, budget: null, salesExecutive: null, followUpDate: null, remarks: null,
+  status: 'NEW', createdAt: 't', createdBy: 1, updatedAt: 't', rowVersion: 1,
 };
 
 function makeRepo() {
@@ -44,6 +45,12 @@ describe('EnquiryService', () => {
     it('rejects (400) when no branch context to allocate a number', async () => {
       await expect(status(service.create({ ...ctx, buId: null }, { customerName: 'A' }))).resolves.toBe(400);
       expect(repo.create).not.toHaveBeenCalled();
+    });
+    it('forwards the additional intake fields to the repository', async () => {
+      repo.create.mockResolvedValue(sample);
+      const dto = { customerName: 'Acme', machineType: 'EOT Crane', quantity: 2, budget: 1500000 };
+      await service.create(ctx, dto);
+      expect(repo.create).toHaveBeenCalledWith(ctx, dto);
     });
   });
 

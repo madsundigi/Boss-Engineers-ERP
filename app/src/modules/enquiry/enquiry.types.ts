@@ -13,6 +13,14 @@ export interface Enquiry {
   industry: string | null;
   source: EnquirySource | null;
   requirement: string | null;
+  mobile: string | null;
+  machineType: string | null;
+  application: string | null;
+  quantity: number | null;
+  budget: number | null;
+  salesExecutive: string | null;
+  followUpDate: string | null;
+  remarks: string | null;
   status: EnquiryStatus;
   createdAt: string;
   createdBy: number | null;

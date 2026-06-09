@@ -45,10 +45,17 @@ d('Enquiry API (integration)', () => {
     const res = await request(app).post('/api/enquiries').set(hdr(salesUser)).send({
       customerName: 'Tata Projects Ltd', contact: 'R. Iyer', email: 'r.iyer@tp.com',
       address: 'Mumbai', industry: 'EPC', source: 'REFERRAL', requirement: '2x 50T EOT cranes',
+      mobile: '+91 98200 11122', machineType: 'EOT Crane', application: 'Steel plant bay',
+      quantity: 2, budget: 1500000, salesExecutive: 'S. Mehta', followUpDate: '2026-07-15',
+      remarks: 'Site visit pending',
     });
     expect(res.status).toBe(201);
     expect(res.body.enquiryNo).toMatch(/^ENQ\/MUM\//);
     expect(res.body.status).toBe('NEW');
+    // the additional intake fields round-trip through create
+    expect(res.body.machineType).toBe('EOT Crane');
+    expect(res.body.quantity).toBe(2);
+    expect(res.body.budget).toBe(1500000);
     createdId = res.body.enquiryId;
     createdVersion = res.body.rowVersion;
   });

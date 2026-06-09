@@ -4,6 +4,7 @@ import { LoginPage } from './auth/LoginPage';
 import { Shell } from './app/Shell';
 import { DashboardPage } from './pages/DashboardPage';
 import { ResourcePage } from './pages/ResourcePage';
+import { SearchPage } from './pages/SearchPage';
 import { UsersPage } from './pages/UsersPage';
 import { RolesPage } from './pages/RolesPage';
 
@@ -23,6 +24,7 @@ function AppRoutes() {
     <Shell>
       <Routes>
         <Route path="/" element={<DashboardPage />} />
+        <Route path="/search" element={<SearchPage />} />
         <Route path="/r/:path" element={<ResourcePage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/roles" element={<RolesPage />} />

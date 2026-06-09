@@ -1,7 +1,25 @@
-import { ReactNode } from 'react';
-import { NavLink } from 'react-router-dom';
+import { ReactNode, useState, FormEvent } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useSession } from '../auth/session';
 import { SECTIONS } from './registry';
+
+/** Global search box (Central Search Engine entry point) — navigates to /search?q=… */
+function TopSearch() {
+  const navigate = useNavigate();
+  const [term, setTerm] = useState('');
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    const t = term.trim();
+    if (t) navigate(`/search?q=${encodeURIComponent(t)}`);
+  }
+  return (
+    <form onSubmit={submit} role="search" style={{ flex: '0 1 360px', margin: '0 16px' }}>
+      <input className="erp-input" value={term} aria-label="Global search"
+        placeholder="Search everything…  ⏎"
+        onChange={(e) => setTerm(e.target.value)} />
+    </form>
+  );
+}
 
 export function Shell({ children }: { children: ReactNode }) {
   const { user, logout } = useSession();
@@ -10,6 +28,7 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="erp-shell">
       <header className="erp-topbar">
         <span className="brand" style={{ fontWeight: 700 }}>Boss Engineers ERP</span>
+        <TopSearch />
         <span className="topbar-spacer" />
         <span className="api-pill">Company #{user?.companyId}</span>
         <span className="erp-avatar" title={user?.username}>

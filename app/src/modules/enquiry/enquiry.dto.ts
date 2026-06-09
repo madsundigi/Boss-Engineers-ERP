@@ -2,8 +2,9 @@ import { z } from 'zod';
 import { ENQUIRY_SOURCE, ENQUIRY_STATUS } from './enquiry.constants';
 
 const trimmed = (max: number) => z.string().trim().max(max);
+const ymd = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
 
-/** POST /enquiries — the 8 business fields (tenant/user come from context). */
+/** POST /enquiries — intake-capture business fields (tenant/user come from context). */
 export const createEnquirySchema = z.object({
   customerName: trimmed(160).min(1, 'Customer Name is required'),
   contact: trimmed(120).optional(),
@@ -12,6 +13,14 @@ export const createEnquirySchema = z.object({
   industry: trimmed(80).optional(),
   source: z.enum(ENQUIRY_SOURCE).optional(),
   requirement: trimmed(8000).optional(),
+  mobile: z.string().trim().max(30).optional(),
+  machineType: trimmed(120).optional(),
+  application: trimmed(200).optional(),
+  quantity: z.coerce.number().nonnegative().optional(),
+  budget: z.coerce.number().nonnegative().optional(),
+  salesExecutive: trimmed(120).optional(),
+  followUpDate: ymd.optional(),
+  remarks: trimmed(8000).optional(),
   // status is server-defaulted to NEW on create; not accepted from the client
 });
 export type CreateEnquiryDto = z.infer<typeof createEnquirySchema>;
