@@ -25,6 +25,10 @@ export interface KpiSummary {
   avgMarginPct: number;         // mean margin_pct over the latest snapshot per project
   deliveryAtRisk: number;       // projects whose latest forecast is risk_level='HIGH'
   criticalItems: number;        // open critical components (scm.critical_item <> RECEIVED)
+  revenue: number;              // Σ fin.invoice.taxable_amount for issued (non-DRAFT/CANCELLED) invoices
+  fatPassRate: number;          // 100 * PASS FATs / non-cancelled FATs (qms.fat_execution), %
+  productionEfficiency: number; // 100 * COMPLETED work orders / non-cancelled WOs (mfg.work_order), %
+  openServiceTickets: number;   // count of svc.service_ticket not RESOLVED/CLOSED
 }
 
 /** One stage of the sales funnel (GET /api/dashboard/sales-funnel). */

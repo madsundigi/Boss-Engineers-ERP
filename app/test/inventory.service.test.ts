@@ -1,7 +1,7 @@
 import { InventoryService } from '../src/modules/inventory/inventory.service';
 import { InventoryRepository } from '../src/modules/inventory/inventory.repository';
 import { RequestContext } from '../src/common/request-context';
-import { StockAdjustment, MaterialIssue, Reservation } from '../src/modules/inventory/inventory.types';
+import { StockAdjustment, MaterialIssue, Reservation, StockRow } from '../src/modules/inventory/inventory.types';
 import { INVENTORY_PERMS } from '../src/modules/inventory/inventory.constants';
 import { AppError } from '../src/common/http-error';
 
@@ -132,6 +132,23 @@ describe('InventoryService', () => {
       const out = await service.issue(baseCtx(), { projectId: 2, itemId: 7, warehouseId: 3, qty: 4, unitCost: 100 });
       expect(out).toBe(sampleIssue);
       expect(out.issueNo).toBe('MI-000001');
+    });
+  });
+
+  describe('listStock', () => {
+    it('surfaces the item Minimum Level + Reorder Level on each stock row', async () => {
+      const row: StockRow = {
+        stockId: 1, companyId: 1, itemId: 7, itemCode: 'ITEM-TEST', itemName: 'Test Item',
+        minLevel: 5, reorderLevel: 20,
+        warehouseId: 3, warehouseCode: 'WH-1', binId: null, batchId: null, projectId: null,
+        qtyOnHand: 100, qtyReserved: 0, qtyAvailable: 100, avgCost: 100, updatedAt: 't',
+      };
+      repo.listStock.mockResolvedValue({ rows: [row], total: 1, page: 1, pageSize: 25 });
+      const out = await service.listStock(baseCtx([INVENTORY_PERMS.VIEW]), {
+        page: 1, pageSize: 25, sort: 'item_code', dir: 'asc', onlyAvailable: false,
+      });
+      expect(out.rows[0].minLevel).toBe(5);
+      expect(out.rows[0].reorderLevel).toBe(20);
     });
   });
 

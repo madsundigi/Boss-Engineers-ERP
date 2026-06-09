@@ -45,6 +45,7 @@ export interface Ncr {
   projectId: number | null;
   failureModeId: number | null;
   severity: string | null;
+  costImpact: number | null;
   raisedDate: string;
   status: NcrStatus;
   createdAt: string;
@@ -71,6 +72,7 @@ export interface ParetoCount {
   key: number | string | null;
   label: string;
   count: number;
+  totalCost: number; // Σ cost_impact for the bucket (0 when every NCR's cost is null)
 }
 
 /**
@@ -84,6 +86,7 @@ export interface ParetoRow {
   failureModeId: number | string | null;
   failureMode: string;
   count: number;
+  totalCost: number;      // Σ cost_impact for the bucket — the cost-impact dimension
   pct: number;            // count / total * 100, rounded to 2dp
   cumulativePct: number;  // running Σ pct down the ordered rows, rounded to 2dp
   isRepeat: boolean;      // count >= 2 (a recurring / repeat failure)

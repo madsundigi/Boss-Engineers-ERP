@@ -5,6 +5,10 @@ const t = (n: number) => z.string().trim().max(n);
 const ymd = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
 const qty = z.coerce.number().nonnegative();
 
+/** Shop-floor progress metrics recordable while a WO is in flight. */
+const delayReason = z.string().trim().max(200);
+const percentComplete = z.coerce.number().min(0).max(100);
+
 /** A routing operation supplied on create / edit. */
 const operationSchema = z.object({
   opSeq: z.coerce.number().int().positive(),
@@ -33,11 +37,14 @@ export const createWorkOrderSchema = z.object({
   plannedEnd: ymd.optional(),
   operations: z.array(operationSchema).max(200).optional(),
   materials: z.array(materialSchema).max(500).optional(),
+  // Execution/progress fields — usually recorded later, but accepted on create too.
+  delayReason: delayReason.optional(),
+  percentComplete: percentComplete.optional(),
   // status is server-defaulted to PLANNED on create; not accepted from the client.
 });
 export type CreateWorkOrderDto = z.infer<typeof createWorkOrderSchema>;
 
-/** PATCH /api/work-orders/:id — edit the plan (only while PLANNED). */
+/** PATCH /api/work-orders/:id — edit the plan / record progress. */
 export const updateWorkOrderSchema = z.object({
   qty: z.coerce.number().positive().optional(),
   wbsId: z.coerce.number().int().positive().optional(),
@@ -47,6 +54,9 @@ export const updateWorkOrderSchema = z.object({
   plannedEnd: ymd.optional(),
   operations: z.array(operationSchema).max(200).optional(),
   materials: z.array(materialSchema).max(500).optional(),
+  // Execution/progress fields — recorded against a WO in flight.
+  delayReason: delayReason.optional(),
+  percentComplete: percentComplete.optional(),
   rowVersion: z.coerce.number().int().positive(), // optimistic concurrency
 });
 export type UpdateWorkOrderDto = z.infer<typeof updateWorkOrderSchema>;
@@ -97,6 +107,9 @@ export type CompleteDto = z.infer<typeof completeSchema>;
 export const changeStatusSchema = z.object({
   status: z.enum(WO_STATUS),
   reason: t(300).optional(),
+  // Execution/progress fields — e.g. capture a delay reason when putting a WO on hold.
+  delayReason: delayReason.optional(),
+  percentComplete: percentComplete.optional(),
   rowVersion: z.coerce.number().int().positive(),
 });
 export type ChangeStatusDto = z.infer<typeof changeStatusSchema>;

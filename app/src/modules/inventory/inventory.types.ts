@@ -7,6 +7,10 @@ export interface StockRow {
   itemId: number;
   itemCode: string;
   itemName: string;
+  /** Minimum / safety stock level for the item (mdm.item.min_level). Null if unset. */
+  minLevel: number | null;
+  /** Reorder level for the item (mdm.item.reorder_level). Null if unset. */
+  reorderLevel: number | null;
   warehouseId: number;
   warehouseCode: string | null;
   binId: number | null;

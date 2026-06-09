@@ -95,30 +95,37 @@ export class DeliveryService {
    * riskLevel:
    *   RED    if any FAT is pending/failed (a quality miss blocks ship), OR the
    *          combined overdue-PO + delayed-WO count reaches RISK_RED_DELAY_THRESHOLD (3);
-   *   YELLOW if any single signal is > 0 (some slip, but below the RED bar);
-   *   GREEN  otherwise (all three signals zero).
+   *   YELLOW if any single signal is > 0 (some slip, but below the RED bar) — this now
+   *          includes a resource constraint (a past-due un-firmed allocation);
+   *   GREEN  otherwise (all four signals zero).
    *
    * driver = the category contributing the largest signal, mapped:
    *   MATERIAL ← overduePurchaseOrders, SCHEDULE ← delayedWorkOrders,
-   *   QUALITY  ← pendingOrFailedFats. Ties break QUALITY > MATERIAL > SCHEDULE
-   *   (quality is the hardest gate, material lead-time the next hardest to recover).
-   *   driver is null exactly when riskLevel is GREEN.
+   *   QUALITY  ← pendingOrFailedFats, CAPACITY ← resourceConstraints. Ties break
+   *   QUALITY > MATERIAL > SCHEDULE > CAPACITY (quality is the hardest gate, material
+   *   lead-time the next hardest to recover); CAPACITY wins only when it is strictly the
+   *   dominant signal. driver is null exactly when riskLevel is GREEN.
    */
   static deriveRisk(s: DeliveryRiskSignals): { riskLevel: RiskRag; driver: RiskDriver | null } {
-    const { overduePurchaseOrders: po, delayedWorkOrders: wo, pendingOrFailedFats: fat } = s;
+    const {
+      overduePurchaseOrders: po, delayedWorkOrders: wo,
+      pendingOrFailedFats: fat, resourceConstraints: cap,
+    } = s;
 
     const riskLevel: RiskRag =
       fat > 0 || po + wo >= RISK_RED_DELAY_THRESHOLD ? 'RED'
-        : po > 0 || wo > 0 ? 'YELLOW'
+        : po > 0 || wo > 0 || cap > 0 ? 'YELLOW'
           : 'GREEN';
 
     if (riskLevel === 'GREEN') return { riskLevel, driver: null };
 
-    // Largest contributing signal wins; ties resolve QUALITY > MATERIAL > SCHEDULE.
+    // Largest contributing signal wins; ties resolve QUALITY > MATERIAL > SCHEDULE >
+    // CAPACITY (CAPACITY is last, so it drives only when strictly the dominant signal).
     const ranked: Array<[number, RiskDriver]> = [
       [fat, 'QUALITY'],
       [po, 'MATERIAL'],
       [wo, 'SCHEDULE'],
+      [cap, 'CAPACITY'],
     ];
     const driver = ranked.reduce((best, cur) => (cur[0] > best[0] ? cur : best))[1];
     return { riskLevel, driver };

@@ -34,6 +34,7 @@ function buildApp(pool: Pool): Express {
 const SCALAR_KEYS = [
   'activeProjects', 'orderBook', 'wipWorkOrders', 'dispatchesMtd',
   'arOutstanding', 'apOutstanding', 'openNcrs', 'avgMarginPct', 'deliveryAtRisk',
+  'revenue', 'fatPassRate', 'productionEfficiency', 'openServiceTickets',
 ] as const;
 
 d('Dashboard API (integration) — read-only KPIs, funnel, export RBAC', () => {

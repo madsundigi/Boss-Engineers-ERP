@@ -6,6 +6,8 @@ import {
   WO_TERMINAL_STATUSES,
   INVOICE_CLOSED_STATUSES,
   VENDOR_INVOICE_EXCLUDED_STATUSES,
+  REVENUE_EXCLUDED_INVOICE_STATUSES,
+  SERVICE_TICKET_CLOSED_STATUSES,
 } from './dashboard.constants';
 
 /** Active-project rollup: count + Σ contract_value (the order book). */
@@ -26,6 +28,10 @@ export interface KpiParts {
   avgMarginPct: number;
   deliveryAtRisk: number;
   criticalItems: number;
+  revenue: number;
+  fatPassRate: number;
+  productionEfficiency: number;
+  openServiceTickets: number;
 }
 
 /**
@@ -49,6 +55,7 @@ export class DashboardRepository {
       const [
         salesPipeline, activeProjects, wipWorkOrders, dispatchesMtd,
         arOutstanding, apOutstanding, openNcrs, avgMarginPct, deliveryAtRisk, criticalItems,
+        revenue, fatPassRate, productionEfficiency, openServiceTickets,
       ] = await Promise.all([
         this.salesPipeline(c, cid),
         this.activeProjects(c, cid),
@@ -60,10 +67,15 @@ export class DashboardRepository {
         this.avgMarginPct(c, cid),
         this.deliveryAtRisk(c, cid),
         this.criticalItems(c, cid),
+        this.revenue(c, cid),
+        this.fatPassRate(c, cid),
+        this.productionEfficiency(c, cid),
+        this.openServiceTickets(c, cid),
       ]);
       return {
         salesPipeline, activeProjects, wipWorkOrders, dispatchesMtd,
         arOutstanding, apOutstanding, openNcrs, avgMarginPct, deliveryAtRisk, criticalItems,
+        revenue, fatPassRate, productionEfficiency, openServiceTickets,
       };
     });
   }
@@ -215,6 +227,55 @@ export class DashboardRepository {
          JOIN proj.project p ON p.project_id = ci.project_id
         WHERE p.company_id = $1 AND ci.status <> 'RECEIVED'`,
       [cid]);
+  }
+
+  private async revenue(c: Queryable, cid: number): Promise<number> {
+    // Σ invoiced (issued) revenue = Σ fin.invoice.taxable_amount for invoices that
+    // have actually been issued (status NOT IN DRAFT/CANCELLED). taxable_amount is
+    // the pre-tax invoice value (mirrors the column arOutstanding reaches via fin.invoice).
+    const r = await c.query<{ amt: number }>(
+      `SELECT COALESCE(SUM(taxable_amount), 0)::float8 AS amt
+         FROM fin.invoice
+        WHERE company_id = $1 AND status <> ALL($2::text[])`,
+      [cid, [...REVENUE_EXCLUDED_INVOICE_STATUSES]]);
+    return Number(r.rows[0].amt);
+  }
+
+  private async fatPassRate(c: Queryable, cid: number): Promise<number> {
+    // FAT pass rate = 100 * passed / non-cancelled FATs. A FAT "passed" on result='PASS';
+    // the denominator excludes cancelled/soft-deleted executions. COALESCE 0 when none.
+    const r = await c.query<{ pct: number }>(
+      `SELECT COALESCE(
+                100.0 * count(*) FILTER (WHERE result = 'PASS')
+                / NULLIF(count(*), 0)
+              , 0)::float8 AS pct
+         FROM qms.fat_execution
+        WHERE company_id = $1 AND NOT is_deleted AND status <> 'CANCELLED'`,
+      [cid]);
+    return Number(r.rows[0].pct);
+  }
+
+  private async productionEfficiency(c: Queryable, cid: number): Promise<number> {
+    // Production efficiency = 100 * COMPLETED work orders / non-cancelled work orders,
+    // by status alone (NOT any percent_complete column). COALESCE 0 on an empty book.
+    const r = await c.query<{ pct: number }>(
+      `SELECT COALESCE(
+                100.0 * count(*) FILTER (WHERE status = 'COMPLETED')
+                / NULLIF(count(*) FILTER (WHERE status <> 'CANCELLED'), 0)
+              , 0)::float8 AS pct
+         FROM mfg.work_order
+        WHERE company_id = $1 AND NOT is_deleted`,
+      [cid]);
+    return Number(r.rows[0].pct);
+  }
+
+  private async openServiceTickets(c: Queryable, cid: number): Promise<number> {
+    // Open service tickets = svc.service_ticket not yet RESOLVED/CLOSED (and not deleted).
+    return this.scalarCount(
+      c,
+      `SELECT count(*) AS n FROM svc.service_ticket
+        WHERE company_id = $1 AND status <> ALL($2::text[]) AND NOT is_deleted`,
+      [cid, [...SERVICE_TICKET_CLOSED_STATUSES]]);
   }
 
   /** Run a `SELECT count(*) AS n ...` and return it as a JS number (0 on empty). */

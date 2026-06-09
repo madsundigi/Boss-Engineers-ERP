@@ -4,7 +4,8 @@ import {
   ServiceRepository, TicketHeaderInput, StatusPatch, KpiWindow,
 } from './service.repository';
 import {
-  ServiceTicket, ServiceTicketListResult, FieldVisit, SpareIssue, WarrantyClaim, ServiceKpis,
+  ServiceTicket, ServiceTicketDetail, ServiceTicketListResult, FieldVisit, SpareIssue,
+  WarrantyClaim, ServiceKpis,
 } from './service.types';
 import {
   CreateTicketDto, UpdateTicketDto, AssignDto, ResolveDto, CancelDto,
@@ -48,13 +49,13 @@ export class ServiceService {
     }
     const header: TicketHeaderInput = {
       customerId: dto.customerId, serialId: dto.serialId, warrantyId: dto.warrantyId,
-      contractId: dto.contractId, priority: dto.priority, isInWarranty: dto.isInWarranty,
-      reportedAt: dto.reportedAt, slaDueAt: dto.slaDueAt,
+      contractId: dto.contractId, complaint: dto.complaint, priority: dto.priority,
+      isInWarranty: dto.isInWarranty, reportedAt: dto.reportedAt, slaDueAt: dto.slaDueAt,
     };
     return this.repo.create(ctx, header, this.mapVisits(dto.visits), this.mapSpares(dto.spares));
   }
 
-  async getById(ctx: RequestContext, id: number): Promise<ServiceTicket> {
+  async getById(ctx: RequestContext, id: number): Promise<ServiceTicketDetail> {
     const row = await this.repo.findById(ctx, id);
     if (!row) throw Errors.notFound(`Service ticket ${id} not found`);
     return row;

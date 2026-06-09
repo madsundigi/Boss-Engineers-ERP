@@ -29,7 +29,7 @@ export class FailureService {
     const header: NcrHeaderInput = {
       source: dto.source, sourceDocId: dto.sourceDocId, itemId: dto.itemId,
       projectId: dto.projectId, failureModeId: dto.failureModeId,
-      severity: dto.severity, raisedDate: dto.raisedDate,
+      severity: dto.severity, costImpact: dto.costImpact, raisedDate: dto.raisedDate,
     };
     return this.repo.create(ctx, header);
   }
@@ -66,6 +66,7 @@ export class FailureService {
         failureModeId: r.key,
         failureMode: r.key === null ? 'Unclassified' : r.label,
         count: r.count,
+        totalCost: r.totalCost,
         pct,
         cumulativePct,
         isRepeat: r.count >= 2,

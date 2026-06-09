@@ -88,15 +88,26 @@ d('Failure Analysis API (integration) — NCR -> RCA -> CAPA -> CLOSE, RBAC', ()
 
   it('raises an NCR (201) as PRODUCTION with an auto-generated NCR number, in OPEN', async () => {
     const res = await request(app).post('/api/ncrs').set(hdr(productionUser)).send({
-      source: 'PRODUCTION', projectId, severity: 'MAJOR',
+      source: 'PRODUCTION', projectId, severity: 'MAJOR', costImpact: 7500.25,
     });
     expect(res.status).toBe(201);
     expect(res.body.ncrNo).toMatch(/^NCR\//);
     expect(res.body.status).toBe('OPEN');
     expect(res.body.rca).toEqual([]);
     expect(res.body.capa).toEqual([]);
+    // cost_impact round-trips through the create -> persisted row.
+    expect(Number(res.body.costImpact)).toBe(7500.25);
     createdId = res.body.ncrId;
     createdVersion = res.body.rowVersion;
+  });
+
+  it('round-trips costImpact on read (GET /:id) and rejects a negative cost (400)', async () => {
+    const got = await request(app).get(`/api/ncrs/${createdId}`).set(hdr(qcUser));
+    expect(got.status).toBe(200);
+    expect(Number(got.body.costImpact)).toBe(7500.25);
+    const bad = await request(app).post('/api/ncrs').set(hdr(productionUser))
+      .send({ source: 'PRODUCTION', costImpact: -1 });
+    expect(bad.status).toBe(400);
   });
 
   it('denies create without NCR_CAPA.CREATE (sales -> 403)', async () => {
@@ -226,18 +237,20 @@ d('Failure Analysis API (integration) — NCR -> RCA -> CAPA -> CLOSE, RBAC', ()
       modeC = await mode('PAR-C', 'Pareto Paint Defect');
 
       // Seed NCRs directly (superuser bypasses RLS for setup). next_document_no needs
-      // the company+bu; these all sit in the seeded raised-date window below.
-      const seed = async (fmId: number, n: number) => {
+      // the company+bu; these all sit in the seeded raised-date window below. Each NCR
+      // carries a fixed cost_impact so the Pareto's per-bucket Σ cost is deterministic:
+      // A -> 3 * 1000 = 3000, B -> 2 * 500 = 1000, C -> 1 * 200 = 200.
+      const seed = async (fmId: number, n: number, cost: number) => {
         for (let i = 0; i < n; i++) {
           await pool.query(
-            `INSERT INTO qms.ncr (company_id, bu_id, ncr_no, source, project_id, failure_mode_id, raised_date, status)
-             VALUES ($1, $2, mdm.next_document_no($1,$2,'NCR'), 'PRODUCTION', $3, $4, DATE '2026-05-15', 'OPEN')`,
-            [companyId, buId, projectId, fmId]);
+            `INSERT INTO qms.ncr (company_id, bu_id, ncr_no, source, project_id, failure_mode_id, cost_impact, raised_date, status)
+             VALUES ($1, $2, mdm.next_document_no($1,$2,'NCR'), 'PRODUCTION', $3, $4, $5, DATE '2026-05-15', 'OPEN')`,
+            [companyId, buId, projectId, fmId, cost]);
         }
       };
-      await seed(modeA, 3);
-      await seed(modeB, 2);
-      await seed(modeC, 1);
+      await seed(modeA, 3, 1000);
+      await seed(modeB, 2, 500);
+      await seed(modeC, 1, 200);
     });
 
     it('returns failure modes ordered by count DESC with correct pct/cumulative + repeat flags', async () => {
@@ -284,6 +297,8 @@ d('Failure Analysis API (integration) — NCR -> RCA -> CAPA -> CLOSE, RBAC', ()
       expect(ids).toEqual([modeA, modeB, modeC]);
       expect(res.body.rows.map((r: { count: number }) => r.count)).toEqual([3, 2, 1]);
       expect(res.body.rows.map((r: { cumulativePct: number }) => r.cumulativePct)).toEqual([50, 83.33, 100]);
+      // Σ cost_impact per failure mode surfaces alongside frequency.
+      expect(res.body.rows.map((r: { totalCost: number }) => Number(r.totalCost))).toEqual([3000, 1000, 200]);
     });
 
     it('supports ?by=source (Pareto on the source dimension)', async () => {

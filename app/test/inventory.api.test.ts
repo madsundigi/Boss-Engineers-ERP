@@ -45,6 +45,13 @@ d('Inventory API (integration)', () => {
     salesUser = Number((await one(`SELECT user_id FROM sec.app_user WHERE username='sales_user'`)).user_id);
     itemId = Number((await one(`SELECT item_id FROM mdm.item WHERE item_code='ITEM-TEST'`)).item_id);
 
+    // Set known Minimum + Reorder levels on the test item so the stock projection
+    // can assert both surface (mdm.item is master data; no API to set them here).
+    await pool.query(
+      `UPDATE mdm.item SET min_level = 5, reorder_level = 20 WHERE item_id = $1`,
+      [itemId],
+    );
+
     // Warehouse fixture (scoped to the MUM business unit).
     warehouseId = Number((await one(
       `INSERT INTO mdm.warehouse (bu_id, wh_code, wh_name)
@@ -96,6 +103,9 @@ d('Inventory API (integration)', () => {
     const row = res.body.rows.find((r: { itemId: number }) => r.itemId === itemId);
     expect(row).toBeDefined();
     expect(row.qtyAvailable).toBe(row.qtyOnHand - row.qtyReserved);
+    // Minimum Level + Reorder Level surface from mdm.item on the stock screen.
+    expect(row.minLevel).toBe(5);
+    expect(row.reorderLevel).toBe(20);
   });
 
   it('denies stock list without INVENTORY.VIEW (403) as sales_user', async () => {

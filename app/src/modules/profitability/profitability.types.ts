@@ -24,9 +24,20 @@ export interface MarginSnapshotListResult {
 }
 
 /**
+ * One cost category of a project's ledger and its summed amount (camelCase
+ * projection of fin.project_cost_ledger grouped by cost_type). `category` is the
+ * raw cost_type code (MATERIAL / LABOUR / FREIGHT / INSTALLATION / WARRANTY / …).
+ */
+export interface CostCategoryRow {
+  category: string;
+  amount: number;
+}
+
+/**
  * The latest snapshot expanded into a P&L shape for a single project. budgetCost
  * is re-derived from the ledger at read time (the snapshot stores committed/actual
- * but not budget); grossMargin = revenue - actualCost.
+ * but not budget); grossMargin = revenue - actualCost. `costByCategory` breaks the
+ * project's ledger cost down by cost_type (Material/Labour/Freight/Installation/…).
  */
 export interface ProjectPnl {
   projectId: number;
@@ -40,6 +51,7 @@ export interface ProjectPnl {
   marginPct: number | null;
   cpi: number | null;
   spi: number | null;
+  costByCategory: CostCategoryRow[];
 }
 
 /**

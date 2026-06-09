@@ -85,13 +85,14 @@ d('FAT API (integration) — lifecycle, result/sign-off, RBAC', () => {
 
   afterAll(async () => { await pool.end(); });
 
-  it('creates a FAT (201) with an auto-generated number', async () => {
+  it('creates a FAT (201) with an auto-generated number and round-trips the engineer', async () => {
     const res = await request(app).post('/api/fat').set(hdr(qcUser)).send({
-      projectId, protocolId, customerWitness: 'Mr. Client',
+      projectId, protocolId, customerWitness: 'Mr. Client', engineerId: qcUser,
     });
     expect(res.status).toBe(201);
     expect(res.body.fatNo).toMatch(/^FAT\//);
     expect(res.body.status).toBe('SCHEDULED');
+    expect(res.body.engineerId).toBe(qcUser);
     createdId = res.body.fatId;
     createdVersion = res.body.rowVersion;
   });

@@ -13,7 +13,7 @@ function fat(over: Partial<Fat> = {}): Fat {
   return {
     fatId: 10, fatNo: 'FAT/MUM/2026-27/00010', companyId: 1, buId: 1,
     projectId: 100, woId: null, protocolId: 200, fatDate: '2026-06-07',
-    status: 'SCHEDULED', result: null, customerWitness: null, signoffBy: null,
+    status: 'SCHEDULED', result: null, customerWitness: null, engineerId: null, signoffBy: null,
     createdAt: 't', createdBy: 7, updatedAt: 't', rowVersion: 1,
     resultLines: [], punchItems: [], ...over,
   };
@@ -45,8 +45,16 @@ describe('FatService', () => {
       const out = await service.create(ctx, { projectId: 100, protocolId: 200 });
       expect(out).toBe(created);
       expect(repo.create).toHaveBeenCalledWith(ctx, {
-        projectId: 100, protocolId: 200, woId: undefined, fatDate: undefined, customerWitness: undefined,
+        projectId: 100, protocolId: 200, woId: undefined, fatDate: undefined,
+        customerWitness: undefined, engineerId: undefined,
       });
+    });
+    it('threads engineerId through to the repo create row and round-trips it back', async () => {
+      repo.create.mockResolvedValue(fat({ engineerId: 42 }));
+      const out = await service.create(ctx, { projectId: 100, protocolId: 200, engineerId: 42 });
+      const [, data] = repo.create.mock.calls[0];
+      expect(data.engineerId).toBe(42);
+      expect(out.engineerId).toBe(42);
     });
     it('rejects (400) when no branch context to allocate a number', async () => {
       await expect(code(service.create({ ...ctx, buId: null }, { projectId: 100, protocolId: 200 }))).resolves.toBe(400);

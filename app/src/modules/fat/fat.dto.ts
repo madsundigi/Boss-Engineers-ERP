@@ -10,6 +10,7 @@ export const createFatSchema = z.object({
   woId: z.coerce.number().int().positive().optional(),
   fatDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').optional(),
   customerWitness: t(120).optional(),
+  engineerId: z.coerce.number().int().positive().optional(),
   // status is server-defaulted to SCHEDULED; result is set later via /result.
 });
 export type CreateFatDto = z.infer<typeof createFatSchema>;

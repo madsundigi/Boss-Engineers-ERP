@@ -63,6 +63,20 @@ d('Quotation API (integration) — versioning, approval, PDF, email, enquiry syn
     v = res.body.rowVersion;
   });
 
+  it('round-trips commercial terms (taxPct + warranty/delivery/payment) on create', async () => {
+    const res = await request(app).post('/api/quotations').set(hdr(sales)).send({
+      customerName: 'Terms Co', totalCost: 100, discountPct: 0,
+      taxPct: 18, deliveryTerms: 'Ex-works 6 weeks', paymentTerms: '50% advance, 50% on delivery',
+      warrantyTerms: '12 months from commissioning',
+      lines: [{ description: 'Hoist 5T', qty: 1, unitPrice: 200 }],
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.taxPct).toBe(18);
+    expect(res.body.warrantyTerms).toBe('12 months from commissioning');
+    expect(res.body.deliveryTerms).toBe('Ex-works 6 weeks');
+    expect(res.body.paymentTerms).toBe('50% advance, 50% on delivery');
+  });
+
   it('submits for approval', async () => {
     const res = await request(app).post(`/api/quotations/${quoteId}/submit`).set(hdr(sales)).send({ rowVersion: v });
     expect(res.status).toBe(200);

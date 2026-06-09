@@ -21,6 +21,7 @@ export const createInstallationSchema = z.object({
   projectId: z.coerce.number().int().positive(),
   dispatchId: z.coerce.number().int().positive().optional(),
   siteAddress: t(400).optional(),
+  siteEngineerId: z.coerce.number().int().positive().optional(),
   plannedDate: ymd.optional(),
   punchItems: z.array(punchItemSchema).max(500).optional(),
 });
@@ -30,6 +31,8 @@ export type CreateInstallationDto = z.infer<typeof createInstallationSchema>;
 export const updateInstallationSchema = z.object({
   dispatchId: z.coerce.number().int().positive().optional(),
   siteAddress: t(400).optional(),
+  siteEngineerId: z.coerce.number().int().positive().optional(),
+  progressPct: z.coerce.number().min(0).max(100).optional(),
   plannedDate: ymd.optional(),
   punchItems: z.array(punchItemSchema).max(500).optional(),
   rowVersion: z.coerce.number().int().positive(), // optimistic concurrency

@@ -29,6 +29,7 @@ export interface ServiceTicket {
   serialId: number | null;
   warrantyId: number | null;
   contractId: number | null;
+  complaint: string | null;
   priority: TicketPriority;
   isInWarranty: boolean;
   reportedAt: string;
@@ -44,6 +45,15 @@ export interface ServiceTicket {
   rowVersion: number;
   visits: FieldVisit[];
   spares: SpareIssue[];
+}
+
+/**
+ * A single ticket with the derived Service Cost figure (the ticket-detail read).
+ * `serviceCost` is computed at read time — NOT a stored column — as the sum of
+ * field-visit travel cost + spare-part value (qty * unit_cost) for the ticket.
+ */
+export interface ServiceTicketDetail extends ServiceTicket {
+  serviceCost: number;
 }
 
 /** A warranty-claim row (camelCase projection of svc.warranty_claim). */

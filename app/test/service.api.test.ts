@@ -40,6 +40,7 @@ d('Service Ticket API (integration) — lifecycle, warranty claim, RBAC', () => 
   let serviceUser: number;
   let storesUser: number;
   let customerId: number;
+  let itemId: number;
   let projectId: number;
   let serialId: number;
   let warrantyId: number;
@@ -66,7 +67,7 @@ d('Service Ticket API (integration) — lifecycle, warranty claim, RBAC', () => 
     // serial, and a warranty for the warranty-claim path.
     customerId = Number((await one(
       `SELECT customer_id FROM mdm.customer WHERE customer_code='CUST-TEST' AND company_id=$1`, [companyId])).customer_id);
-    const itemId = Number((await one(
+    itemId = Number((await one(
       `SELECT item_id FROM mdm.item WHERE item_code='ITEM-TEST' AND company_id=$1`, [companyId])).item_id);
 
     const proj = await one(
@@ -108,6 +109,36 @@ d('Service Ticket API (integration) — lifecycle, warranty claim, RBAC', () => 
     expect(res.body.assignedEngineerId).toBeNull();
     createdId = res.body.ticketId;
     createdVersion = res.body.rowVersion;
+  });
+
+  it('round-trips the complaint text and computes serviceCost from visits + spares', async () => {
+    // Create with a complaint, one field visit (travel_cost 150) and two spares
+    // worth qty*unit_cost = 2*99 + 1*50 = 248 -> serviceCost = 150 + 248 = 398.
+    const created = await request(app).post('/api/service-tickets').set(hdr(serviceUser)).send({
+      customerId,
+      complaint: 'Spindle overheats and trips after ~2h of run',
+      visits: [{ travelCost: 150, hours: 3 }],
+      spares: [
+        { itemId, qty: 2, unitCost: 99, isChargeable: true },
+        { itemId, qty: 1, unitCost: 50 },
+      ],
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.complaint).toMatch(/overheats/);
+
+    const got = await request(app).get(`/api/service-tickets/${created.body.ticketId}`).set(hdr(serviceUser));
+    expect(got.status).toBe(200);
+    expect(got.body.complaint).toMatch(/overheats/);
+    // serviceCost = SUM(field_visit.travel_cost) + SUM(spare_issue.qty*unit_cost)
+    expect(got.body.serviceCost).toBeCloseTo(398, 4);
+  });
+
+  it('reports a zero serviceCost for a ticket with no visits or spares', async () => {
+    const created = await request(app).post('/api/service-tickets').set(hdr(serviceUser)).send({ customerId });
+    expect(created.status).toBe(201);
+    const got = await request(app).get(`/api/service-tickets/${created.body.ticketId}`).set(hdr(serviceUser));
+    expect(got.status).toBe(200);
+    expect(got.body.serviceCost).toBe(0);
   });
 
   it('denies create without SERVICE_TICKET.CREATE (stores -> 403)', async () => {

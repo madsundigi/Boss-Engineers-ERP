@@ -20,6 +20,10 @@ export const createQuotationSchema = z.object({
   currencyCode: t(3).optional().default('INR'),
   totalCost: z.coerce.number().min(0).default(0),
   discountPct: z.coerce.number().min(0).max(100).optional().default(0),
+  taxPct: z.coerce.number().nonnegative().optional(),
+  deliveryTerms: t(200).optional(),
+  paymentTerms: t(200).optional(),
+  warrantyTerms: t(200).optional(),
   lines: z.array(lineSchema).min(1, 'At least one line is required').max(500),
   enquiryId: z.coerce.number().int().positive().optional(),
 });
@@ -34,6 +38,10 @@ export const updateQuotationSchema = z.object({
   currencyCode: t(3).optional(),
   totalCost: z.coerce.number().min(0).optional(),
   discountPct: z.coerce.number().min(0).max(100).optional(),
+  taxPct: z.coerce.number().nonnegative().optional(),
+  deliveryTerms: t(200).optional(),
+  paymentTerms: t(200).optional(),
+  warrantyTerms: t(200).optional(),
   lines: z.array(lineSchema).min(1).max(500).optional(),
   rowVersion: z.coerce.number().int().positive(),
 });

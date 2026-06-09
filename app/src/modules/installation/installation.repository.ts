@@ -8,7 +8,8 @@ import { DOC_TYPE, InstallationStatus } from './installation.constants';
 
 /** Header columns of svc.installation (bu_id added in migration 014; the rest exist in db/04). */
 const H = `install_id, install_no, company_id, bu_id, project_id, dispatch_id,
-  site_address, planned_date, actual_date, sat_result, acceptance_cert_no, accepted_date,
+  site_address, site_engineer_id, progress_pct, planned_date, actual_date, sat_result,
+  acceptance_cert_no, accepted_date,
   status, created_at, created_by, updated_at, row_version`;
 
 type Header = Omit<Installation, 'punchItems'>;
@@ -22,6 +23,8 @@ function mapHeader(r: QueryResultRow): Header {
     projectId: Number(r.project_id),
     dispatchId: r.dispatch_id == null ? null : Number(r.dispatch_id),
     siteAddress: r.site_address,
+    siteEngineerId: r.site_engineer_id == null ? null : Number(r.site_engineer_id),
+    progressPct: r.progress_pct == null ? null : Number(r.progress_pct),
     plannedDate: r.planned_date,
     actualDate: r.actual_date,
     satResult: r.sat_result,
@@ -48,6 +51,8 @@ export interface InstallationHeaderInput {
   projectId: number;
   dispatchId?: number;
   siteAddress?: string;
+  siteEngineerId?: number;
+  progressPct?: number;
   plannedDate?: string;
 }
 /** Partial header patch carried alongside a status change (SAT / acceptance stamps). */
@@ -82,13 +87,14 @@ export class InstallationRepository {
       const res = await c.query(
         `INSERT INTO svc.installation
            (company_id, bu_id, install_no, project_id, dispatch_id,
-            site_address, planned_date, status, created_by)
+            site_address, site_engineer_id, progress_pct, planned_date, status, created_by)
          VALUES ($1,$2, mdm.next_document_no($1,$2,'${DOC_TYPE}'),
-                 $3,$4,$5,$6, 'PLANNED', $7)
+                 $3,$4,$5,$6,$7,$8, 'PLANNED', $9)
          RETURNING ${H}`,
         [
           ctx.companyId, ctx.buId, h.projectId, h.dispatchId ?? null,
-          h.siteAddress ?? null, h.plannedDate ?? null, ctx.userId,
+          h.siteAddress ?? null, h.siteEngineerId ?? null, h.progressPct ?? null,
+          h.plannedDate ?? null, ctx.userId,
         ]);
       const header = mapHeader(res.rows[0]);
       await this.insertPunch(c, header.installId, punch);
@@ -136,6 +142,8 @@ export class InstallationRepository {
     const add = (col: string, val: unknown) => { params.push(val); set.push(`${col} = $${params.length}`); };
     if (fields.dispatchId !== undefined) add('dispatch_id', fields.dispatchId);
     if (fields.siteAddress !== undefined) add('site_address', fields.siteAddress);
+    if (fields.siteEngineerId !== undefined) add('site_engineer_id', fields.siteEngineerId);
+    if (fields.progressPct !== undefined) add('progress_pct', fields.progressPct);
     if (fields.plannedDate !== undefined) add('planned_date', fields.plannedDate);
     add('updated_by', ctx.userId);
 

@@ -32,6 +32,7 @@ export const createTicketSchema = z.object({
   serialId: z.coerce.number().int().positive().optional(),
   warrantyId: z.coerce.number().int().positive().optional(),
   contractId: z.coerce.number().int().positive().optional(),
+  complaint: z.string().trim().max(4000).optional(),
   priority: z.enum(TICKET_PRIORITY).optional(),
   isInWarranty: z.coerce.boolean().optional(),
   reportedAt: z.string().trim().datetime({ offset: true }).optional(),

@@ -17,6 +17,7 @@ export const createNcrSchema = z.object({
   failureModeId: z.coerce.number().int().positive().optional(),
   severity: t(10).optional(),
   raisedDate: date.optional(),
+  costImpact: z.coerce.number().nonnegative().optional(), // quantified cost of the nonconformance
 });
 export type CreateNcrDto = z.infer<typeof createNcrSchema>;
 

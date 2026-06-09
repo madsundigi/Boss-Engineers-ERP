@@ -21,7 +21,7 @@ function ncr(over: Partial<Ncr> = {}): Ncr {
   return {
     ncrId: 10, ncrNo: 'NCR/MUM/2026-27/000010', companyId: 1, buId: 1,
     source: 'PRODUCTION', sourceDocId: null, itemId: null, projectId: 100,
-    failureModeId: null, severity: null, raisedDate: '2026-06-07',
+    failureModeId: null, severity: null, costImpact: null, raisedDate: '2026-06-07',
     status: 'OPEN', createdAt: 't', createdBy: 5, updatedAt: 't', rowVersion: 1,
     rca: [], capa: [], ...over,
   };
@@ -64,6 +64,15 @@ describe('FailureService', () => {
       await expect(code(service.create({ ...ctx, buId: null }, { source: 'PRODUCTION' }))).resolves.toBe(400);
       expect(repo.create).not.toHaveBeenCalled();
     });
+    it('threads costImpact through to the repo header and round-trips it back', async () => {
+      const created = ncr({ costImpact: 12500.5 });
+      repo.create.mockResolvedValue(created);
+      const out = await service.create(ctx, { source: 'WARRANTY', costImpact: 12500.5 });
+      expect(out.costImpact).toBe(12500.5);
+      expect(repo.create).toHaveBeenCalledWith(
+        ctx, expect.objectContaining({ source: 'WARRANTY', costImpact: 12500.5 }),
+      );
+    });
   });
 
   describe('getById', () => {
@@ -77,14 +86,16 @@ describe('FailureService', () => {
     it('computes pct + a running cumulativePct, preserves count-DESC order, flags repeats', async () => {
       // Repo returns rows already ordered count DESC (its ORDER BY). total = 10.
       repo.paretoCounts.mockResolvedValue([
-        { key: 1, label: 'Weld crack', count: 5 },
-        { key: 2, label: 'Seal leak', count: 3 },
-        { key: null, label: '', count: 2 }, // unclassified bucket
+        { key: 1, label: 'Weld crack', count: 5, totalCost: 5000 },
+        { key: 2, label: 'Seal leak', count: 3, totalCost: 1500 },
+        { key: null, label: '', count: 2, totalCost: 0 }, // unclassified bucket
       ]);
       const out = await service.pareto(ctx, { by: 'mode' });
 
       expect(out.by).toBe('mode');
       expect(out.total).toBe(10);
+      // cost impact surfaces per bucket alongside frequency (Σ cost_impact)
+      expect(out.rows.map((r) => r.totalCost)).toEqual([5000, 1500, 0]);
       // ordering preserved exactly as the repo handed them over
       expect(out.rows.map((r) => r.failureModeId)).toEqual([1, 2, null]);
       // pct = count/total*100
@@ -101,8 +112,8 @@ describe('FailureService', () => {
     it('marks a count of 1 as NOT a repeat and rounds pct/cumulative to 2dp', async () => {
       // total = 3 -> shares are 66.666.. / 33.333.. ; assert 2dp rounding + repeat flag.
       repo.paretoCounts.mockResolvedValue([
-        { key: 7, label: 'Bearing wear', count: 2 },
-        { key: 8, label: 'Paint defect', count: 1 },
+        { key: 7, label: 'Bearing wear', count: 2, totalCost: 800 },
+        { key: 8, label: 'Paint defect', count: 1, totalCost: 0 },
       ]);
       const out = await service.pareto(ctx, { by: 'mode' });
       expect(out.total).toBe(3);
@@ -117,11 +128,11 @@ describe('FailureService', () => {
     });
 
     it('passes the chosen dimension through to the repo and echoes it', async () => {
-      repo.paretoCounts.mockResolvedValue([{ key: 'FAT', label: 'FAT', count: 1 }]);
+      repo.paretoCounts.mockResolvedValue([{ key: 'FAT', label: 'FAT', count: 1, totalCost: 250 }]);
       const out = await service.pareto(ctx, { by: 'source' });
       expect(repo.paretoCounts).toHaveBeenCalledWith(ctx, { by: 'source' });
       expect(out.by).toBe('source');
-      expect(out.rows[0]).toMatchObject({ failureModeId: 'FAT', failureMode: 'FAT' });
+      expect(out.rows[0]).toMatchObject({ failureModeId: 'FAT', failureMode: 'FAT', totalCost: 250 });
     });
   });
 

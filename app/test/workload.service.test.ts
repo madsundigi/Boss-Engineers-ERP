@@ -11,8 +11,8 @@ const ctx: RequestContext = {
 };
 
 const alloc: Allocation = {
-  allocId: 5, companyId: 1, employeeId: 7, employeeName: 'Asha Rao',
-  projectId: 3, taskId: null, allocDate: '2026-06-10', plannedHours: 4,
+  allocId: 5, companyId: 1, employeeId: 7, employeeName: 'Asha Rao', department: 'Engineering',
+  projectId: 3, taskId: null, allocDate: '2026-06-10', plannedHours: 4, completionPct: null,
   status: 'PLANNED', refType: null, refId: null, rowVersion: 1,
 };
 
@@ -94,6 +94,19 @@ describe('WorkloadService', () => {
       expect(out.allocation.refType).toBe('WORK_ORDER');
       expect(out.allocation.refId).toBe(42);
     });
+
+    it('threads completionPct through to the repo and surfaces the employee department', async () => {
+      repo.getEmployeeCostRate.mockResolvedValue(500);
+      repo.allocatedHoursOn.mockResolvedValue(0);
+      repo.createAllocation.mockResolvedValue({ ...alloc, completionPct: 30, department: 'Production' });
+      const dto = {
+        employeeId: 7, projectId: 3, allocDate: '2026-06-10', plannedHours: 4, completionPct: 30,
+      };
+      const out = await service.createAllocation(ctx, dto);
+      expect(repo.createAllocation).toHaveBeenCalledWith(ctx, dto);
+      expect(out.allocation.completionPct).toBe(30);
+      expect(out.allocation.department).toBe('Production');
+    });
   });
 
   // The both-or-neither rule is enforced at the DTO boundary (route validate()),
@@ -116,6 +129,17 @@ describe('WorkloadService', () => {
     });
     it('rejects an unknown refType value', () => {
       expect(createAllocationSchema.safeParse({ ...base, refType: 'SHIPMENT', refId: 9 }).success).toBe(false);
+    });
+    it('accepts a completionPct within 0..100 (and coerces a numeric string)', () => {
+      const r = createAllocationSchema.safeParse({ ...base, completionPct: '75' });
+      expect(r.success).toBe(true);
+      if (r.success) expect(r.data.completionPct).toBe(75);
+    });
+    it('rejects a completionPct above 100', () => {
+      expect(createAllocationSchema.safeParse({ ...base, completionPct: 150 }).success).toBe(false);
+    });
+    it('rejects a negative completionPct', () => {
+      expect(createAllocationSchema.safeParse({ ...base, completionPct: -1 }).success).toBe(false);
     });
   });
 

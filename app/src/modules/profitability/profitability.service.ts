@@ -107,9 +107,14 @@ export class ProfitabilityService {
     return row;
   }
 
-  /** The latest snapshot for a project expanded into a P&L shape (404 if none). */
+  /**
+   * The latest snapshot for a project expanded into a P&L shape (404 if none),
+   * enriched with the project's cost broken down by CATEGORY (cost_type) read live
+   * from the ledger — Material / Labour / Freight / Installation / Warranty / …
+   */
   async projectPnl(ctx: RequestContext, projectId: number): Promise<ProjectPnl> {
     const s = await this.getLatestForProject(ctx, projectId);
+    const costByCategory = await this.repo.costByCategory(ctx, projectId);
     return {
       projectId: s.projectId,
       snapshotId: s.snapshotId,
@@ -122,6 +127,7 @@ export class ProfitabilityService {
       marginPct: s.marginPct,
       cpi: s.cpi,
       spi: s.spi,
+      costByCategory,
     };
   }
 

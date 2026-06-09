@@ -6,10 +6,14 @@ export interface Allocation {
   companyId: number;
   employeeId: number;
   employeeName: string | null;
+  /** Department name of the assigned employee (hcm.department.dept_name). Null if unassigned. */
+  department: string | null;
   projectId: number;
   taskId: number | null;
   allocDate: string;
   plannedHours: number;
+  /** How far along this allocation is, 0..100 (%). Null if unset. */
+  completionPct: number | null;
   status: AllocationStatus;
   /** Optional downstream work item this allocation serves (with refId). Null if unlinked. */
   refType: AllocationRefType | null;

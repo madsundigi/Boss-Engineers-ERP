@@ -37,6 +37,10 @@ export class DashboardService {
       avgMarginPct: p.avgMarginPct,
       deliveryAtRisk: p.deliveryAtRisk,
       criticalItems: p.criticalItems,
+      revenue: p.revenue,
+      fatPassRate: p.fatPassRate,
+      productionEfficiency: p.productionEfficiency,
+      openServiceTickets: p.openServiceTickets,
     };
   }
 
@@ -67,6 +71,10 @@ export class DashboardService {
       ['avgMarginPct', k.avgMarginPct],
       ['deliveryAtRisk', k.deliveryAtRisk],
       ['criticalItems', k.criticalItems],
+      ['revenue', k.revenue],
+      ['fatPassRate', k.fatPassRate],
+      ['productionEfficiency', k.productionEfficiency],
+      ['openServiceTickets', k.openServiceTickets],
     ];
     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const lines = rows.map(([metric, value]) => `${esc(metric)},${esc(value)}`);

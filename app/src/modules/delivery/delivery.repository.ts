@@ -8,6 +8,7 @@ import {
   PO_SETTLED_STATUSES,
   WO_FINISHED_STATUSES,
   FAT_PENDING_OR_FAILED_STATUSES,
+  ALLOC_PLANNED_STATUS,
 } from './delivery.constants';
 
 // Columns of proj.delivery_forecast (company_id added in migration 017 for RLS).
@@ -130,29 +131,40 @@ export class DeliveryRepository {
    *    IN COMPLETED/CLOSED/CANCELLED) whose planned_end has passed (NULLs dropped).
    *  - pendingOrFailedFats: qms.fat_execution for the project whose lifecycle
    *    status is SCHEDULED/IN_PROGRESS/FAILED (i.e. not yet passed/cleared, or failed).
+   *  - resourceConstraints: hcm.resource_allocation for the project still PLANNED
+   *    (capacity not yet CONFIRMED) whose alloc_date has passed — a past-due, un-firmed
+   *    booking that signals a resource bottleneck. (Uses status/alloc_date only, never
+   *    completion_pct.)
    */
   async fetchRiskSignals(ctx: RequestContext, projectId: number): Promise<DeliveryRiskSignals> {
     return runRead(this.pool, ctx, async (c) => {
-      const [overduePurchaseOrders, delayedWorkOrders, pendingOrFailedFats] = await Promise.all([
-        this.countScalar(c,
-          `SELECT count(*)::int AS n FROM scm.purchase_order
-            WHERE company_id = $1 AND project_id = $2 AND NOT is_deleted
-              AND status <> ALL($3::text[])
-              AND expected_date < CURRENT_DATE`,
-          [ctx.companyId, projectId, [...PO_SETTLED_STATUSES]]),
-        this.countScalar(c,
-          `SELECT count(*)::int AS n FROM mfg.work_order
-            WHERE company_id = $1 AND project_id = $2 AND NOT is_deleted
-              AND status <> ALL($3::text[])
-              AND planned_end < CURRENT_DATE`,
-          [ctx.companyId, projectId, [...WO_FINISHED_STATUSES]]),
-        this.countScalar(c,
-          `SELECT count(*)::int AS n FROM qms.fat_execution
-            WHERE company_id = $1 AND project_id = $2 AND NOT is_deleted
-              AND status = ANY($3::text[])`,
-          [ctx.companyId, projectId, [...FAT_PENDING_OR_FAILED_STATUSES]]),
-      ]);
-      return { overduePurchaseOrders, delayedWorkOrders, pendingOrFailedFats };
+      const [overduePurchaseOrders, delayedWorkOrders, pendingOrFailedFats, resourceConstraints] =
+        await Promise.all([
+          this.countScalar(c,
+            `SELECT count(*)::int AS n FROM scm.purchase_order
+              WHERE company_id = $1 AND project_id = $2 AND NOT is_deleted
+                AND status <> ALL($3::text[])
+                AND expected_date < CURRENT_DATE`,
+            [ctx.companyId, projectId, [...PO_SETTLED_STATUSES]]),
+          this.countScalar(c,
+            `SELECT count(*)::int AS n FROM mfg.work_order
+              WHERE company_id = $1 AND project_id = $2 AND NOT is_deleted
+                AND status <> ALL($3::text[])
+                AND planned_end < CURRENT_DATE`,
+            [ctx.companyId, projectId, [...WO_FINISHED_STATUSES]]),
+          this.countScalar(c,
+            `SELECT count(*)::int AS n FROM qms.fat_execution
+              WHERE company_id = $1 AND project_id = $2 AND NOT is_deleted
+                AND status = ANY($3::text[])`,
+            [ctx.companyId, projectId, [...FAT_PENDING_OR_FAILED_STATUSES]]),
+          this.countScalar(c,
+            `SELECT count(*)::int AS n FROM hcm.resource_allocation
+              WHERE company_id = $1 AND project_id = $2
+                AND status = $3
+                AND alloc_date < CURRENT_DATE`,
+            [ctx.companyId, projectId, ALLOC_PLANNED_STATUS]),
+        ]);
+      return { overduePurchaseOrders, delayedWorkOrders, pendingOrFailedFats, resourceConstraints };
     });
   }
 

@@ -32,7 +32,7 @@ export class FatService {
     }
     const data: CreateFatRow = {
       projectId: dto.projectId, protocolId: dto.protocolId, woId: dto.woId,
-      fatDate: dto.fatDate, customerWitness: dto.customerWitness,
+      fatDate: dto.fatDate, customerWitness: dto.customerWitness, engineerId: dto.engineerId,
     };
     return this.repo.create(ctx, data);
   }

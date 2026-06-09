@@ -128,6 +128,37 @@ d('Installation API (integration) — create, commission, gated acceptance, RBAC
     expect(no.status).toBe(404);
   });
 
+  it('round-trips siteEngineerId on create and progressPct on update', async () => {
+    // site_engineer_id FKs sec.app_user; install_user is a real seeded user.
+    const created = await request(app).post('/api/installations').set(hdr(installUser)).send({
+      projectId, siteAddress: 'Plot 9, MIDC', siteEngineerId: installUser, plannedDate: '2026-07-01',
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.siteEngineerId).toBe(installUser);
+    expect(created.body.progressPct).toBeNull();
+
+    // PATCH the progress while still PLANNED (an editable status).
+    const patched = await request(app).patch(`/api/installations/${created.body.installId}`).set(hdr(installUser))
+      .send({ progressPct: 45.5, rowVersion: created.body.rowVersion });
+    expect(patched.status).toBe(200);
+    expect(Number(patched.body.progressPct)).toBeCloseTo(45.5, 2);
+    expect(patched.body.siteEngineerId).toBe(installUser);
+
+    // re-read confirms persistence
+    const reread = await request(app).get(`/api/installations/${created.body.installId}`).set(hdr(installUser));
+    expect(reread.status).toBe(200);
+    expect(Number(reread.body.progressPct)).toBeCloseTo(45.5, 2);
+    expect(reread.body.siteEngineerId).toBe(installUser);
+  });
+
+  it('rejects an out-of-range progressPct (400)', async () => {
+    const created = await request(app).post('/api/installations').set(hdr(installUser)).send({ projectId });
+    expect(created.status).toBe(201);
+    const bad = await request(app).patch(`/api/installations/${created.body.installId}`).set(hdr(installUser))
+      .send({ progressPct: 150, rowVersion: created.body.rowVersion });
+    expect(bad.status).toBe(400);
+  });
+
   it('BLOCKS acceptance before commissioning / SAT pass (409)', async () => {
     // still PLANNED — cannot accept (must commission with a PASS first)
     const res = await request(app).post(`/api/installations/${createdId}/accept`).set(hdr(installUser))

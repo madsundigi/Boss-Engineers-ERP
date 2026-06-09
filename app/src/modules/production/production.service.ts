@@ -1,6 +1,6 @@
 import { Errors } from '../../common/http-error';
 import { RequestContext } from '../../common/request-context';
-import { ProductionRepository, CreateWorkOrderRow, HeaderFields, ConfirmationInput } from './production.repository';
+import { ProductionRepository, CreateWorkOrderRow, HeaderFields, ConfirmationInput, StatusPatch } from './production.repository';
 import { WorkOrder, WorkOrderListResult } from './production.types';
 import {
   CreateWorkOrderDto, UpdateWorkOrderDto, ReleaseDto, ConfirmDto, CompleteDto,
@@ -37,6 +37,8 @@ export class ProductionService {
       routingId: dto.routingId,
       plannedStart: dto.plannedStart,
       plannedEnd: dto.plannedEnd,
+      delayReason: dto.delayReason,
+      percentComplete: dto.percentComplete,
       operations: dto.operations?.map((o) => ({
         opSeq: o.opSeq, workCenterId: o.workCenterId, stdTimeMin: o.stdTimeMin,
       })),
@@ -182,7 +184,11 @@ export class ProductionService {
     if (dto.status === 'CANCELLED' && !dto.reason) {
       throw Errors.badRequest('A reason is required when cancelling a work order');
     }
-    const updated = await this.repo.updateStatus(ctx, id, dto.rowVersion, dto.status);
+    // Capture in-flight progress metrics alongside the transition (e.g. delay reason on hold).
+    const patch: StatusPatch = {};
+    if (dto.delayReason !== undefined) patch.delay_reason = dto.delayReason;
+    if (dto.percentComplete !== undefined) patch.percent_complete = dto.percentComplete;
+    const updated = await this.repo.updateStatus(ctx, id, dto.rowVersion, dto.status, patch);
     if (!updated) throw Errors.conflict('Work order was modified by someone else (row version mismatch)');
     return updated;
   }

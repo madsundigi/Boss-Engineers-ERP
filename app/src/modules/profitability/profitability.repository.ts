@@ -2,7 +2,9 @@ import { Pool, QueryResultRow } from 'pg';
 import { runInContext, runRead } from '../../db/pool';
 import { emitOutbox, OutboxEventInput } from '../../outbox/outbox';
 import { RequestContext } from '../../common/request-context';
-import { MarginSnapshot, MarginSnapshotListResult, PortfolioMarginRow } from './profitability.types';
+import {
+  MarginSnapshot, MarginSnapshotListResult, PortfolioMarginRow, CostCategoryRow,
+} from './profitability.types';
 import { ListQueryDto } from './profitability.dto';
 import { COST_STAGE } from './profitability.constants';
 
@@ -105,6 +107,25 @@ export class ProfitabilityRepository {
         committedCost: byStage[COST_STAGE.COMMITTED] ?? 0,
         actualCost: byStage[COST_STAGE.ACTUAL] ?? 0,
       };
+    });
+  }
+
+  /**
+   * Project cost broken down by CATEGORY (cost_type): one row per cost_type present
+   * on the project's ledger with its summed amount, ordered by amount DESC. Scoped
+   * by RLS plus an explicit company_id; aggregates across all stages (a category's
+   * full ledger spend). An empty ledger yields [].
+   */
+  async costByCategory(ctx: RequestContext, projectId: number): Promise<CostCategoryRow[]> {
+    return runRead(this.pool, ctx, async (c) => {
+      const res = await c.query<{ cost_type: string; amount: string }>(
+        `SELECT cost_type, COALESCE(SUM(amount), 0)::text AS amount
+           FROM fin.project_cost_ledger
+          WHERE project_id = $1 AND company_id = $2
+          GROUP BY cost_type
+          ORDER BY SUM(amount) DESC, cost_type ASC`,
+        [projectId, ctx.companyId]);
+      return res.rows.map((r) => ({ category: r.cost_type, amount: Number(r.amount) }));
     });
   }
 

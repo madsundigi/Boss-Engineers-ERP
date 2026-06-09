@@ -37,6 +37,22 @@ export const COST_STAGE = {
 export type CostStage = (typeof COST_STAGE)[keyof typeof COST_STAGE];
 
 /**
+ * Cost-CATEGORY on fin.project_cost_ledger.cost_type (CHECK ck_cost_type2, db/05;
+ * INSTALLATION added in migration 052). Drives the cost-by-category profitability
+ * breakdown — Material / Labour / Subcon / Freight / Overhead / Warranty / Installation.
+ */
+export const COST_CATEGORY = {
+  MATERIAL: 'MATERIAL',
+  LABOUR: 'LABOUR',
+  SUBCON: 'SUBCON',
+  FREIGHT: 'FREIGHT',
+  OVERHEAD: 'OVERHEAD',
+  WARRANTY: 'WARRANTY',
+  INSTALLATION: 'INSTALLATION',
+} as const;
+export type CostCategory = (typeof COST_CATEGORY)[keyof typeof COST_CATEGORY];
+
+/**
  * Domain event emitted whenever a margin snapshot is computed. Downstream
  * consumers (CEO dashboard / finance alerts) refresh the project's margin tile.
  * Payload: { projectId, revenue, actualCost, marginPct }.

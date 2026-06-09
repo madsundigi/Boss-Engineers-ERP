@@ -14,12 +14,16 @@ const LABELS: Record<string, string> = {
   avgMarginPct: 'Avg Margin %',
   deliveryAtRisk: 'Delivery At-Risk',
   criticalItems: 'Critical Items',
+  revenue: 'Revenue',
+  fatPassRate: 'FAT Pass Rate',
+  productionEfficiency: 'Production Efficiency',
+  openServiceTickets: 'Open Service Tickets',
 };
 
 function fmt(key: string, v: unknown): string {
   if (typeof v !== 'number') return v == null ? '—' : String(v);
-  if (/Outstanding|orderBook|Value/i.test(key)) return '₹' + v.toLocaleString('en-IN');
-  if (/Pct/i.test(key)) return `${v.toFixed(1)}%`;
+  if (/Outstanding|orderBook|Value|revenue/i.test(key)) return '₹' + v.toLocaleString('en-IN');
+  if (/Pct|Rate|Efficiency/i.test(key)) return `${v.toFixed(1)}%`;
   return v.toLocaleString('en-IN');
 }
 

@@ -16,6 +16,8 @@ export const createAllocationSchema = z.object({
   // (Production work-order / FAT / Installation). Both-or-neither (see refine).
   refType: z.enum(ALLOCATION_REF_TYPE).optional(),
   refId: z.coerce.number().int().positive().optional(),
+  // Optional progress on this allocation (0..100%). Omitted -> null (not started/unknown).
+  completionPct: z.coerce.number().min(0).max(100).optional(),
   // status is server-defaulted to PLANNED on create; not accepted from the client
 }).refine((d) => (d.refType == null) === (d.refId == null), {
   message: 'refType and refId must be provided together',

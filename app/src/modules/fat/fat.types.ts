@@ -30,6 +30,7 @@ export interface Fat {
   status: FatStatus;
   result: FatResult | null;
   customerWitness: string | null;
+  engineerId: number | null;
   signoffBy: number | null;
   createdAt: string;
   createdBy: number | null;

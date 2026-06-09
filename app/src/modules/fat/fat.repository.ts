@@ -8,7 +8,7 @@ import { DOC_TYPE, FatResult, FatStatus } from './fat.constants';
 
 /** Header columns of qms.fat_execution (status/bu_id added in migration 009). */
 const H = `fat_id, fat_no, company_id, bu_id, project_id, wo_id, protocol_id,
-  fat_date, status, result, customer_witness, signoff_by,
+  fat_date, status, result, customer_witness, engineer_id, signoff_by,
   created_at, created_by, updated_at, row_version`;
 
 type Header = Omit<Fat, 'resultLines' | 'punchItems'>;
@@ -26,6 +26,7 @@ function mapHeader(r: QueryResultRow): Header {
     status: r.status,
     result: r.result,
     customerWitness: r.customer_witness,
+    engineerId: r.engineer_id == null ? null : Number(r.engineer_id),
     signoffBy: r.signoff_by == null ? null : Number(r.signoff_by),
     createdAt: r.created_at,
     createdBy: r.created_by == null ? null : Number(r.created_by),
@@ -57,6 +58,7 @@ export interface CreateFatRow {
   woId?: number;
   fatDate?: string;
   customerWitness?: string;
+  engineerId?: number;
 }
 /** Partial header patch carried alongside a status change (sign-off etc.). */
 export type StatusPatch = Partial<Record<'signoff_by' | 'customer_witness' | 'result', unknown>>;
@@ -99,13 +101,13 @@ export class FatRepository {
       const res = await c.query(
         `INSERT INTO qms.fat_execution
            (company_id, bu_id, fat_no, project_id, wo_id, protocol_id,
-            fat_date, status, customer_witness, created_by)
+            fat_date, status, customer_witness, engineer_id, created_by)
          VALUES ($1,$2, mdm.next_document_no($1,$2,'${DOC_TYPE}'),
-                 $3,$4,$5, COALESCE($6::date, current_date), 'SCHEDULED', $7, $8)
+                 $3,$4,$5, COALESCE($6::date, current_date), 'SCHEDULED', $7, $8, $9)
          RETURNING ${H}`,
         [
           ctx.companyId, ctx.buId, data.projectId, data.woId ?? null, data.protocolId,
-          data.fatDate ?? null, data.customerWitness ?? null, ctx.userId,
+          data.fatDate ?? null, data.customerWitness ?? null, data.engineerId ?? null, ctx.userId,
         ]);
       const header = mapHeader(res.rows[0]);
       return { ...header, resultLines: [], punchItems: [] };

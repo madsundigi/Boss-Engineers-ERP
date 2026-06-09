@@ -41,7 +41,8 @@ export class InstallationService {
     }
     const header: InstallationHeaderInput = {
       projectId: dto.projectId, dispatchId: dto.dispatchId,
-      siteAddress: dto.siteAddress, plannedDate: dto.plannedDate,
+      siteAddress: dto.siteAddress, siteEngineerId: dto.siteEngineerId,
+      plannedDate: dto.plannedDate,
     };
     return this.repo.create(ctx, header, this.mapPunch(dto.punchItems));
   }

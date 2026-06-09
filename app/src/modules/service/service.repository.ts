@@ -3,7 +3,8 @@ import { runInContext, runRead, Queryable } from '../../db/pool';
 import { emitOutbox, OutboxEventInput } from '../../outbox/outbox';
 import { RequestContext } from '../../common/request-context';
 import {
-  ServiceTicket, FieldVisit, SpareIssue, ServiceTicketListResult, WarrantyClaim, ServiceKpis,
+  ServiceTicket, ServiceTicketDetail, FieldVisit, SpareIssue, ServiceTicketListResult,
+  WarrantyClaim, ServiceKpis,
 } from './service.types';
 import { ListQueryDto } from './service.dto';
 import { DOC_TYPE, ServiceTicketStatus, ClaimStatus } from './service.constants';
@@ -14,7 +15,7 @@ import { DOC_TYPE, ServiceTicketStatus, ClaimStatus } from './service.constants'
  * table (db/04).
  */
 const H = `ticket_id, ticket_no, company_id, bu_id, customer_id, serial_id, warranty_id,
-  contract_id, priority, is_in_warranty, reported_at, sla_due_at, resolved_at, resolution,
+  contract_id, complaint, priority, is_in_warranty, reported_at, sla_due_at, resolved_at, resolution,
   csat_rating, status, assigned_engineer_id, created_at, created_by, updated_at, row_version`;
 
 type Header = Omit<ServiceTicket, 'visits' | 'spares'>;
@@ -29,6 +30,7 @@ function mapHeader(r: QueryResultRow): Header {
     serialId: r.serial_id == null ? null : Number(r.serial_id),
     warrantyId: r.warranty_id == null ? null : Number(r.warranty_id),
     contractId: r.contract_id == null ? null : Number(r.contract_id),
+    complaint: r.complaint,
     priority: r.priority,
     isInWarranty: r.is_in_warranty,
     reportedAt: r.reported_at,
@@ -80,6 +82,7 @@ export interface TicketHeaderInput {
   serialId?: number;
   warrantyId?: number;
   contractId?: number;
+  complaint?: string;
   priority?: string;
   isInWarranty?: boolean;
   reportedAt?: string;
@@ -137,14 +140,14 @@ export class ServiceRepository {
       const res = await c.query(
         `INSERT INTO svc.service_ticket
            (company_id, bu_id, ticket_no, customer_id, serial_id, warranty_id, contract_id,
-            priority, is_in_warranty, reported_at, sla_due_at, status, created_by)
+            complaint, priority, is_in_warranty, reported_at, sla_due_at, status, created_by)
          VALUES ($1,$2, mdm.next_document_no($1,$2,'${DOC_TYPE}'),
-                 $3,$4,$5,$6, COALESCE($7,'MED'), COALESCE($8,false),
-                 COALESCE($9::timestamptz, now()), $10, 'OPEN', $11)
+                 $3,$4,$5,$6, $7, COALESCE($8,'MED'), COALESCE($9,false),
+                 COALESCE($10::timestamptz, now()), $11, 'OPEN', $12)
          RETURNING ${H}`,
         [
           ctx.companyId, ctx.buId, h.customerId, h.serialId ?? null, h.warrantyId ?? null,
-          h.contractId ?? null, h.priority ?? null, h.isInWarranty ?? null,
+          h.contractId ?? null, h.complaint ?? null, h.priority ?? null, h.isInWarranty ?? null,
           h.reportedAt ?? null, h.slaDueAt ?? null, ctx.userId,
         ]);
       const header = mapHeader(res.rows[0]);
@@ -158,15 +161,25 @@ export class ServiceRepository {
     });
   }
 
-  async findById(ctx: RequestContext, id: number): Promise<ServiceTicket | null> {
+  async findById(ctx: RequestContext, id: number): Promise<ServiceTicketDetail | null> {
     return runRead(this.pool, ctx, async (c) => {
+      // Service Cost is computed (NOT stored): field-visit travel cost + spare-part
+      // value (qty * unit_cost) for this ticket, via correlated subqueries. Each is
+      // COALESCEd to 0 so a ticket with no visits/spares yields 0 (never NULL).
       const res = await c.query(
-        `SELECT ${H} FROM svc.service_ticket
-          WHERE ticket_id = $1 AND company_id = $2 AND NOT is_deleted`,
+        `SELECT ${H},
+            ( COALESCE((SELECT SUM(fv.travel_cost)
+                          FROM svc.field_visit fv WHERE fv.ticket_id = t.ticket_id), 0)
+            + COALESCE((SELECT SUM(si.qty * si.unit_cost)
+                          FROM svc.spare_issue si WHERE si.ticket_id = t.ticket_id), 0)
+            )::float8 AS service_cost
+           FROM svc.service_ticket t
+          WHERE t.ticket_id = $1 AND t.company_id = $2 AND NOT t.is_deleted`,
         [id, ctx.companyId]);
       if (!res.rowCount) return null;
       return {
         ...mapHeader(res.rows[0]),
+        serviceCost: Number(res.rows[0].service_cost),
         visits: await this.fetchVisits(c, id),
         spares: await this.fetchSpares(c, id),
       };

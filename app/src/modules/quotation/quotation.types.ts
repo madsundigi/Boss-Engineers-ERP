@@ -27,6 +27,10 @@ export interface Quotation {
   totalPrice: number;
   discountPct: number;
   marginPct: number;
+  taxPct: number | null;
+  deliveryTerms: string | null;
+  paymentTerms: string | null;
+  warrantyTerms: string | null;
   status: QuoteStatus;
   sentAt: string | null;
   sentTo: string | null;

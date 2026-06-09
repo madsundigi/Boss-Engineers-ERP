@@ -46,14 +46,26 @@ d('Workload API (integration)', () => {
     planningUser = Number((await one(`SELECT user_id FROM sec.app_user WHERE username='planning_user'`)).user_id);
     salesUser = Number((await one(`SELECT user_id FROM sec.app_user WHERE username='sales_user'`)).user_id);
 
-    // Minimal employee (idempotent on the unique emp_code). cost_rate drives
-    // the timesheet line cost_amount, so set a non-zero rate.
-    const emp = await one(
-      `INSERT INTO hcm.employee (company_id, emp_code, full_name, cost_rate, billing_rate, status)
-       VALUES ($1,'EMP-WL-TEST','Workload Test Engineer', 500, 900, 'ACTIVE')
-       ON CONFLICT (emp_code) DO UPDATE SET full_name = EXCLUDED.full_name
-       RETURNING employee_id`,
+    // Department fixture so the allocation projection can surface a department
+    // name (idempotent on the unique (company_id, dept_code)).
+    const dept = await one(
+      `INSERT INTO hcm.department (company_id, dept_code, dept_name)
+       VALUES ($1,'DEPT-WL-TEST','Workload Test Dept')
+       ON CONFLICT (company_id, dept_code) DO UPDATE SET dept_name = EXCLUDED.dept_name
+       RETURNING department_id`,
       [companyId],
+    );
+    const departmentId = Number(dept.department_id);
+
+    // Minimal employee (idempotent on the unique emp_code). cost_rate drives
+    // the timesheet line cost_amount, so set a non-zero rate. Attached to the
+    // department above so the allocation read projection resolves a dept name.
+    const emp = await one(
+      `INSERT INTO hcm.employee (company_id, emp_code, full_name, department_id, cost_rate, billing_rate, status)
+       VALUES ($1,'EMP-WL-TEST','Workload Test Engineer', $2, 500, 900, 'ACTIVE')
+       ON CONFLICT (emp_code) DO UPDATE SET full_name = EXCLUDED.full_name, department_id = EXCLUDED.department_id
+       RETURNING employee_id`,
+      [companyId, departmentId],
     );
     employeeId = Number(emp.employee_id);
 
@@ -87,16 +99,26 @@ d('Workload API (integration)', () => {
 
   it('creates an allocation (201) and reports capacity vs load', async () => {
     const res = await request(app).post('/api/workload/allocations').set(hdr(hrUser)).send({
-      employeeId, projectId, allocDate: '2026-06-10', plannedHours: 4,
+      employeeId, projectId, allocDate: '2026-06-10', plannedHours: 4, completionPct: 25,
     });
     expect(res.status).toBe(201);
     expect(res.body.allocation.status).toBe('PLANNED');
     expect(res.body.allocation.employeeId).toBe(employeeId);
+    // The assigned employee's department name surfaces on the projection.
+    expect(res.body.allocation.department).toBe('Workload Test Dept');
+    // completionPct round-trips out on the created allocation.
+    expect(res.body.allocation.completionPct).toBe(25);
     // No work-item ref supplied -> both ref fields null on the projection.
     expect(res.body.allocation.refType).toBeNull();
     expect(res.body.allocation.refId).toBeNull();
     expect(typeof res.body.overAllocated).toBe('boolean');
     expect(res.body.allocatedHours).toBeGreaterThanOrEqual(4);
+
+    // The completion % must survive a re-read (GET by id).
+    const got = await request(app).get(`/api/workload/allocations/${res.body.allocation.allocId}`).set(hdr(hrUser));
+    expect(got.status).toBe(200);
+    expect(got.body.completionPct).toBe(25);
+    expect(got.body.department).toBe('Workload Test Dept');
   });
 
   it('links an allocation to a downstream work item (refType/refId round-trips)', async () => {

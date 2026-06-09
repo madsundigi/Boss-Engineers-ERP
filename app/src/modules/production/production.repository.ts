@@ -12,6 +12,7 @@ import { DOC_TYPE, WoStatus } from './production.constants';
 /** Header columns of mfg.work_order (bu_id added in migration 012). */
 const H = `wo_id, wo_no, company_id, bu_id, project_id, wbs_id, item_id, bom_id,
   routing_id, qty, planned_start, planned_end, actual_start, actual_end, status,
+  delay_reason, percent_complete,
   created_at, created_by, updated_at, row_version`;
 
 type Header = Omit<WorkOrder, 'operations' | 'materials' | 'confirmations' | 'asBuilt'>;
@@ -33,6 +34,8 @@ function mapHeader(r: QueryResultRow): Header {
     actualStart: r.actual_start,
     actualEnd: r.actual_end,
     status: r.status,
+    delayReason: r.delay_reason == null ? null : r.delay_reason,
+    percentComplete: r.percent_complete == null ? null : Number(r.percent_complete),
     createdAt: r.created_at,
     createdBy: r.created_by == null ? null : Number(r.created_by),
     updatedAt: r.updated_at,
@@ -88,6 +91,8 @@ export interface CreateWorkOrderRow {
   routingId?: number;
   plannedStart?: string;
   plannedEnd?: string;
+  delayReason?: string;
+  percentComplete?: number;
   operations?: { opSeq: number; workCenterId: number; stdTimeMin: number }[];
   materials?: { itemId: number; requiredQty: number }[];
 }
@@ -99,10 +104,13 @@ export type HeaderFields = {
   routingId?: number;
   plannedStart?: string;
   plannedEnd?: string;
+  delayReason?: string;
+  percentComplete?: number;
 };
 
-/** Partial header patch carried alongside a status change (release / complete). */
-export type StatusPatch = Partial<Record<'planned_start' | 'actual_start' | 'actual_end', unknown>>;
+/** Partial header patch carried alongside a status change (release / complete / hold). */
+export type StatusPatch = Partial<Record<
+  'planned_start' | 'actual_start' | 'actual_end' | 'delay_reason' | 'percent_complete', unknown>>;
 
 /** One production confirmation to insert against an operation. */
 export interface ConfirmationInput {
@@ -186,14 +194,15 @@ export class ProductionRepository {
       const res = await c.query(
         `INSERT INTO mfg.work_order
            (company_id, bu_id, wo_no, project_id, wbs_id, item_id, bom_id, routing_id,
-            qty, planned_start, planned_end, status, created_by)
+            qty, planned_start, planned_end, delay_reason, percent_complete, status, created_by)
          VALUES ($1,$2, mdm.next_document_no($1,$2,'${DOC_TYPE}'),
-                 $3,$4,$5,$6,$7,$8,$9,$10,'PLANNED',$11)
+                 $3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'PLANNED',$13)
          RETURNING ${H}`,
         [
           ctx.companyId, ctx.buId, data.projectId, data.wbsId ?? null, data.itemId,
           data.bomId ?? null, data.routingId ?? null, data.qty,
-          data.plannedStart ?? null, data.plannedEnd ?? null, ctx.userId,
+          data.plannedStart ?? null, data.plannedEnd ?? null,
+          data.delayReason ?? null, data.percentComplete ?? null, ctx.userId,
         ]);
       const header = mapHeader(res.rows[0]);
       if (data.operations?.length) await this.insertOperations(c, header.woId, data.operations);
@@ -254,6 +263,8 @@ export class ProductionRepository {
     if (fields.routingId !== undefined) add('routing_id', fields.routingId);
     if (fields.plannedStart !== undefined) add('planned_start', fields.plannedStart);
     if (fields.plannedEnd !== undefined) add('planned_end', fields.plannedEnd);
+    if (fields.delayReason !== undefined) add('delay_reason', fields.delayReason);
+    if (fields.percentComplete !== undefined) add('percent_complete', fields.percentComplete);
     add('updated_by', ctx.userId);
 
     return runInContext(this.pool, ctx, async (c) => {

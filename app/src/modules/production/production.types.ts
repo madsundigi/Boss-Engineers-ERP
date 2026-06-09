@@ -56,6 +56,8 @@ export interface WorkOrder {
   actualStart: string | null;
   actualEnd: string | null;
   status: WoStatus;
+  delayReason: string | null;
+  percentComplete: number | null;
   createdAt: string;
   createdBy: number | null;
   updatedAt: string;

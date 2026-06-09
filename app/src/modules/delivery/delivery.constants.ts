@@ -89,6 +89,14 @@ export const WO_FINISHED_STATUSES = ['COMPLETED', 'CLOSED', 'CANCELLED'] as cons
 export const FAT_PENDING_OR_FAILED_STATUSES = ['SCHEDULED', 'IN_PROGRESS', 'FAILED'] as const;
 
 /**
+ * Resource-allocation status that counts as a "resource constraint" when its
+ * alloc_date has already passed: PLANNED (booked but not yet CONFIRMED). A past-due
+ * PLANNED allocation means capacity for that work was never firmed up — a bottleneck.
+ * (hcm.resource_allocation.ck_alloc_status: PLANNED, CONFIRMED, CANCELLED.)
+ */
+export const ALLOC_PLANNED_STATUS = 'PLANNED';
+
+/**
  * RED threshold: a project is RED if the combined count of overdue POs and
  * delayed WOs reaches this many (a quality failure forces RED on its own).
  */

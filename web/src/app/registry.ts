@@ -219,6 +219,10 @@ export const FORMS: Record<string, FormField[]> = {
     { name: 'validUntil', label: 'Valid Until', type: 'date' },
     { name: 'totalCost', label: 'Total Cost', type: 'number' },
     { name: 'discountPct', label: 'Discount %', type: 'number' },
+    { name: 'taxPct', label: 'Tax %', type: 'number' },
+    { name: 'deliveryTerms', label: 'Delivery Terms' },
+    { name: 'paymentTerms', label: 'Payment Terms' },
+    { name: 'warrantyTerms', label: 'Warranty Terms' },
     { name: 'enquiryId', label: 'Enquiry ID', type: 'number' },
   ],
   invoices: [

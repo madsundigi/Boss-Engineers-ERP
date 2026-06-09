@@ -132,8 +132,9 @@ describe('DeliveryService', () => {
   // is exercised against the fake repo for the 404 + signal-passthrough paths.
   // -------------------------------------------------------------------------
   describe('deriveRisk (pure GREEN/YELLOW/RED rule)', () => {
-    const sig = (po: number, wo: number, fat: number) => ({
-      overduePurchaseOrders: po, delayedWorkOrders: wo, pendingOrFailedFats: fat,
+    const sig = (po: number, wo: number, fat: number, cap = 0) => ({
+      overduePurchaseOrders: po, delayedWorkOrders: wo,
+      pendingOrFailedFats: fat, resourceConstraints: cap,
     });
 
     it('GREEN with null driver when all three signals are zero', () => {
@@ -146,6 +147,23 @@ describe('DeliveryService', () => {
 
     it('YELLOW + SCHEDULE for a lone delayed WO', () => {
       expect(DeliveryService.deriveRisk(sig(0, 2, 0))).toEqual({ riskLevel: 'YELLOW', driver: 'SCHEDULE' });
+    });
+
+    it('YELLOW + CAPACITY for a lone resource constraint (past-due PLANNED allocation)', () => {
+      expect(DeliveryService.deriveRisk(sig(0, 0, 0, 1))).toEqual({ riskLevel: 'YELLOW', driver: 'CAPACITY' });
+    });
+
+    it('CAPACITY drives only when strictly the dominant signal (does not steal ties)', () => {
+      // cap=3 strictly beats po=1/wo=1 -> CAPACITY drives (still YELLOW: po+wo<3, no FAT).
+      expect(DeliveryService.deriveRisk(sig(1, 1, 0, 3))).toEqual({ riskLevel: 'YELLOW', driver: 'CAPACITY' });
+      // tie cap=1 == po=1: MATERIAL outranks CAPACITY (ties resolve before CAPACITY).
+      expect(DeliveryService.deriveRisk(sig(1, 0, 0, 1))).toEqual({ riskLevel: 'YELLOW', driver: 'MATERIAL' });
+    });
+
+    it('RED is still raised by a pending FAT even when CAPACITY is the dominant driver', () => {
+      // FAT>0 forces RED; the driver is the largest signal (cap=9) -> CAPACITY, mirroring
+      // how an existing RED attributes its driver to whichever signal is largest.
+      expect(DeliveryService.deriveRisk(sig(0, 0, 1, 9))).toEqual({ riskLevel: 'RED', driver: 'CAPACITY' });
     });
 
     it('YELLOW + MATERIAL when PO+WO=2 (one each, still under threshold 3)', () => {
@@ -181,7 +199,7 @@ describe('DeliveryService', () => {
     it('returns the derived risk + raw signals for an existing project', async () => {
       repo.projectExists.mockResolvedValue(true);
       repo.fetchRiskSignals.mockResolvedValue({
-        overduePurchaseOrders: 2, delayedWorkOrders: 1, pendingOrFailedFats: 0,
+        overduePurchaseOrders: 2, delayedWorkOrders: 1, pendingOrFailedFats: 0, resourceConstraints: 0,
       });
       const out = await service.getProjectRisk(ctx, 100);
       expect(repo.fetchRiskSignals).toHaveBeenCalledWith(ctx, 100);
@@ -189,7 +207,7 @@ describe('DeliveryService', () => {
         projectId: 100,
         riskLevel: 'RED', // 2 + 1 >= 3
         driver: 'MATERIAL',
-        signals: { overduePurchaseOrders: 2, delayedWorkOrders: 1, pendingOrFailedFats: 0 },
+        signals: { overduePurchaseOrders: 2, delayedWorkOrders: 1, pendingOrFailedFats: 0, resourceConstraints: 0 },
       });
       expect(typeof out.asOf).toBe('string');
     });
@@ -197,11 +215,24 @@ describe('DeliveryService', () => {
     it('maps an all-zero project to GREEN with a null driver', async () => {
       repo.projectExists.mockResolvedValue(true);
       repo.fetchRiskSignals.mockResolvedValue({
-        overduePurchaseOrders: 0, delayedWorkOrders: 0, pendingOrFailedFats: 0,
+        overduePurchaseOrders: 0, delayedWorkOrders: 0, pendingOrFailedFats: 0, resourceConstraints: 0,
       });
       const out = await service.getProjectRisk(ctx, 100);
       expect(out.riskLevel).toBe('GREEN');
       expect(out.driver).toBeNull();
+    });
+
+    it('maps a resource-only constraint to YELLOW + CAPACITY through the service', async () => {
+      repo.projectExists.mockResolvedValue(true);
+      repo.fetchRiskSignals.mockResolvedValue({
+        overduePurchaseOrders: 0, delayedWorkOrders: 0, pendingOrFailedFats: 0, resourceConstraints: 2,
+      });
+      const out = await service.getProjectRisk(ctx, 100);
+      expect(out).toMatchObject({
+        riskLevel: 'YELLOW',
+        driver: 'CAPACITY',
+        signals: { overduePurchaseOrders: 0, delayedWorkOrders: 0, pendingOrFailedFats: 0, resourceConstraints: 2 },
+      });
     });
   });
 });

@@ -1,7 +1,7 @@
 import { ServiceService } from '../src/modules/service/service.service';
 import { ServiceRepository } from '../src/modules/service/service.repository';
 import { RequestContext } from '../src/common/request-context';
-import { ServiceTicket, WarrantyClaim } from '../src/modules/service/service.types';
+import { ServiceTicketDetail, WarrantyClaim } from '../src/modules/service/service.types';
 import { AppError } from '../src/common/http-error';
 
 const ctx: RequestContext = {
@@ -9,15 +9,15 @@ const ctx: RequestContext = {
   clientIp: '10.0.0.1', sessionId: 's', permissions: new Set(),
 };
 
-function ticket(over: Partial<ServiceTicket> = {}): ServiceTicket {
+function ticket(over: Partial<ServiceTicketDetail> = {}): ServiceTicketDetail {
   return {
     ticketId: 30, ticketNo: 'TKT/MUM/2026-27/000030', companyId: 1, buId: 1,
     customerId: 50, serialId: null, warrantyId: null, contractId: null,
-    priority: 'MED', isInWarranty: false, reportedAt: 't', slaDueAt: null,
+    complaint: null, priority: 'MED', isInWarranty: false, reportedAt: 't', slaDueAt: null,
     resolvedAt: null, resolution: null, csatRating: null,
     status: 'OPEN', assignedEngineerId: null,
     createdAt: 't', createdBy: 5, updatedAt: 't', rowVersion: 1,
-    visits: [], spares: [], ...over,
+    serviceCost: 0, visits: [], spares: [], ...over,
   };
 }
 
@@ -74,6 +74,13 @@ describe('ServiceService', () => {
       ]);
       expect(sparesArg).toEqual([{ itemId: 7, qty: 1, unitCost: 99, isChargeable: true }]);
     });
+    it('threads the complaint text into the repo header input', async () => {
+      repo.create.mockResolvedValue(ticket({ complaint: 'Spindle overheats after 2h' }));
+      const out = await service.create(ctx, { customerId: 50, complaint: 'Spindle overheats after 2h' });
+      expect(out.complaint).toBe('Spindle overheats after 2h');
+      const [, header] = repo.create.mock.calls[0];
+      expect(header).toMatchObject({ customerId: 50, complaint: 'Spindle overheats after 2h' });
+    });
     it('rejects (400) when no branch context to allocate a number', async () => {
       await expect(code(service.create({ ...ctx, buId: null }, { customerId: 50 }))).resolves.toBe(400);
       expect(repo.create).not.toHaveBeenCalled();
@@ -84,6 +91,11 @@ describe('ServiceService', () => {
     it('404 when not found', async () => {
       repo.findById.mockResolvedValue(null);
       await expect(code(service.getById(ctx, 99))).resolves.toBe(404);
+    });
+    it('surfaces the computed serviceCost from the repo detail', async () => {
+      repo.findById.mockResolvedValue(ticket({ serviceCost: 1350 }));
+      const out = await service.getById(ctx, 30);
+      expect(out.serviceCost).toBe(1350);
     });
   });
 

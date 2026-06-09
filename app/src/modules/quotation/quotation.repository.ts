@@ -8,7 +8,8 @@ import { DOC_TYPE, QuoteStatus } from './quotation.constants';
 
 const H = `quotation_id, quotation_no, company_id, bu_id, enquiry_id, current_revision,
   subject, customer_name, contact_person AS contact, email, quote_date, valid_until,
-  currency_code, total_cost, total_price, discount_pct, margin_pct, status,
+  currency_code, total_cost, total_price, discount_pct, margin_pct,
+  tax_pct, delivery_terms, payment_terms, warranty_terms, status,
   sent_at, sent_to, pdf_ref, created_by, created_at, row_version`;
 
 type Header = Omit<Quotation, 'lines'>;
@@ -21,6 +22,8 @@ function mapHeader(r: QueryResultRow): Header {
     contact: r.contact, email: r.email, quoteDate: r.quote_date, validUntil: r.valid_until,
     currencyCode: r.currency_code, totalCost: Number(r.total_cost), totalPrice: Number(r.total_price),
     discountPct: Number(r.discount_pct), marginPct: r.margin_pct == null ? 0 : Number(r.margin_pct),
+    taxPct: r.tax_pct == null ? null : Number(r.tax_pct),
+    deliveryTerms: r.delivery_terms, paymentTerms: r.payment_terms, warrantyTerms: r.warranty_terms,
     status: r.status, sentAt: r.sent_at, sentTo: r.sent_to, pdfRef: r.pdf_ref,
     createdBy: r.created_by == null ? null : Number(r.created_by),
     createdAt: r.created_at, rowVersion: Number(r.row_version),
@@ -37,6 +40,7 @@ export interface QuotationHeaderInput {
   subject?: string; customerName: string; contact?: string; email?: string;
   validUntil?: string; currencyCode: string; totalCost: number; totalPrice: number;
   discountPct: number; enquiryId?: number;
+  taxPct?: number; deliveryTerms?: string; paymentTerms?: string; warrantyTerms?: string;
 }
 export type StatusPatch = Partial<Record<
   'submitted_at' | 'submitted_by' | 'decided_at' | 'decided_by' | 'decision_reason' | 'sent_at' | 'sent_to' | 'pdf_ref',
@@ -66,13 +70,16 @@ export class QuotationRepository {
       const res = await c.query(
         `INSERT INTO sales.quotation
            (company_id, bu_id, quotation_no, enquiry_id, subject, customer_name, contact_person,
-            email, valid_until, currency_code, total_cost, total_price, discount_pct, status, created_by)
+            email, valid_until, currency_code, total_cost, total_price, discount_pct,
+            tax_pct, delivery_terms, payment_terms, warranty_terms, status, created_by)
          VALUES ($1,$2, mdm.next_document_no($1,$2,'${DOC_TYPE}'),
-                 $3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'DRAFT',$13)
+                 $3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'DRAFT',$17)
          RETURNING ${H}`,
         [ctx.companyId, ctx.buId, h.enquiryId ?? null, h.subject ?? null, h.customerName,
          h.contact ?? null, h.email ?? null, h.validUntil ?? null, h.currencyCode,
-         h.totalCost, h.totalPrice, h.discountPct, ctx.userId]);
+         h.totalCost, h.totalPrice, h.discountPct,
+         h.taxPct ?? null, h.deliveryTerms ?? null, h.paymentTerms ?? null, h.warrantyTerms ?? null,
+         ctx.userId]);
       const header = mapHeader(res.rows[0]);
       await this.insertLines(c, header.quotationId, lines);
       await c.query(
@@ -122,6 +129,10 @@ export class QuotationRepository {
     if (fields.totalCost !== undefined) add('total_cost', fields.totalCost);
     if (fields.totalPrice !== undefined) add('total_price', fields.totalPrice);
     if (fields.discountPct !== undefined) add('discount_pct', fields.discountPct);
+    if (fields.taxPct !== undefined) add('tax_pct', fields.taxPct);
+    if (fields.deliveryTerms !== undefined) add('delivery_terms', fields.deliveryTerms);
+    if (fields.paymentTerms !== undefined) add('payment_terms', fields.paymentTerms);
+    if (fields.warrantyTerms !== undefined) add('warranty_terms', fields.warrantyTerms);
     if (forceStatusDraft) set.push(`status = 'DRAFT'`);
     add('updated_by', ctx.userId);
 

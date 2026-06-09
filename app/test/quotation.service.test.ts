@@ -16,7 +16,8 @@ function quote(over: Partial<Quotation> = {}): Quotation {
     quotationId: 1, quotationNo: 'QTN/MUM/2026-27/000001', companyId: 1, buId: 1, enquiryId: null,
     currentRevision: 0, subject: 'X', customerName: 'Acme', contact: null, email: 'a@a.com',
     quoteDate: '2026-06-06', validUntil: null, currencyCode: 'INR', totalCost: 80, totalPrice: 100,
-    discountPct: 0, marginPct: 20, status: 'DRAFT', sentAt: null, sentTo: null, pdfRef: null,
+    discountPct: 0, marginPct: 20, taxPct: null, deliveryTerms: null, paymentTerms: null, warrantyTerms: null,
+    status: 'DRAFT', sentAt: null, sentTo: null, pdfRef: null,
     createdBy: 1, createdAt: 't', rowVersion: 1, lines: [], ...over,
   };
 }
@@ -37,6 +38,21 @@ describe('QuotationService', () => {
     // header is the 2nd arg to repo.create(ctx, header, lines): 2*100=200, less 10% = 180
     const headerArg = d.repo.create.mock.calls[0][1];
     expect(headerArg.totalPrice).toBe(180);
+  });
+
+  it('create threads commercial terms (taxPct + warrantyTerms) into the header', async () => {
+    const d = deps();
+    d.repo.create.mockResolvedValue(quote());
+    await d.svc.create(ctx, {
+      customerName: 'Acme', currencyCode: 'INR', totalCost: 80, discountPct: 0,
+      taxPct: 18, deliveryTerms: 'Ex-works 6 weeks', paymentTerms: '50% advance', warrantyTerms: '12 months',
+      lines: [{ description: 'A', qty: 1, unitPrice: 100, isOptional: false }],
+    });
+    const headerArg = d.repo.create.mock.calls[0][1];
+    expect(headerArg.taxPct).toBe(18);
+    expect(headerArg.warrantyTerms).toBe('12 months');
+    expect(headerArg.deliveryTerms).toBe('Ex-works 6 weeks');
+    expect(headerArg.paymentTerms).toBe('50% advance');
   });
 
   it('create requires a branch (400)', async () => {

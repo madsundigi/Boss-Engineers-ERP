@@ -52,6 +52,7 @@ export class QuotationService {
       subject: dto.subject, customerName: dto.customerName, contact: dto.contact, email: dto.email,
       validUntil: dto.validUntil, currencyCode: dto.currencyCode, totalCost: dto.totalCost,
       totalPrice: applyDiscount(gross, dto.discountPct), discountPct: dto.discountPct, enquiryId: dto.enquiryId,
+      taxPct: dto.taxPct, deliveryTerms: dto.deliveryTerms, paymentTerms: dto.paymentTerms, warrantyTerms: dto.warrantyTerms,
     };
     return this.repo.create(ctx, header, mapped);
   }

@@ -24,6 +24,10 @@ function parts(over: Partial<KpiParts> = {}): KpiParts {
     avgMarginPct: 21.5,
     deliveryAtRisk: 1,
     criticalItems: 3,
+    revenue: 525000,
+    fatPassRate: 92.5,
+    productionEfficiency: 80,
+    openServiceTickets: 4,
     ...over,
   };
 }
@@ -37,6 +41,7 @@ function zeroParts(): KpiParts {
     activeProjects: { count: 0, orderBook: 0 },
     wipWorkOrders: 0, dispatchesMtd: 0, arOutstanding: 0, apOutstanding: 0,
     openNcrs: 0, avgMarginPct: 0, deliveryAtRisk: 0, criticalItems: 0,
+    revenue: 0, fatPassRate: 0, productionEfficiency: 0, openServiceTickets: 0,
   };
 }
 
@@ -51,7 +56,7 @@ function makeRepo(): jest.Mocked<DashboardRepoLike> {
 const SCALAR_KEYS = [
   'activeProjects', 'orderBook', 'wipWorkOrders', 'dispatchesMtd',
   'arOutstanding', 'apOutstanding', 'openNcrs', 'avgMarginPct', 'deliveryAtRisk',
-  'criticalItems',
+  'criticalItems', 'revenue', 'fatPassRate', 'productionEfficiency', 'openServiceTickets',
 ] as const;
 
 describe('DashboardService', () => {
@@ -80,6 +85,11 @@ describe('DashboardService', () => {
       expect(k.openNcrs).toBe(5);
       expect(k.avgMarginPct).toBe(21.5);
       expect(k.deliveryAtRisk).toBe(1);
+      expect(k.criticalItems).toBe(3);
+      expect(k.revenue).toBe(525000);
+      expect(k.fatPassRate).toBe(92.5);
+      expect(k.productionEfficiency).toBe(80);
+      expect(k.openServiceTickets).toBe(4);
     });
 
     it('always returns every numeric KPI key as a number', async () => {
@@ -128,18 +138,22 @@ describe('DashboardService', () => {
       const lines = csv.split('\n');
 
       expect(lines[0]).toBe('Metric,Value');
-      // header + 4 pipeline rows + 10 scalar rows = 15 lines
-      expect(lines).toHaveLength(15);
+      // header + 4 pipeline rows + 14 scalar rows = 19 lines
+      expect(lines).toHaveLength(19);
       expect(csv).toContain('"activeProjects","6"');
       expect(csv).toContain('"orderBook","250000"');
       expect(csv).toContain('"salesPipeline.openQuotationValue","7500"');
       expect(csv).toContain('"avgMarginPct","21.5"');
+      expect(csv).toContain('"revenue","525000"');
+      expect(csv).toContain('"fatPassRate","92.5"');
+      expect(csv).toContain('"productionEfficiency","80"');
+      expect(csv).toContain('"openServiceTickets","4"');
     });
 
     it('still produces a complete CSV (all zeros) for an empty company', async () => {
       repo.fetchKpiParts.mockResolvedValue(zeroParts());
       const csv = await service.exportKpisCsv(ctx);
-      expect(csv.split('\n')).toHaveLength(15);
+      expect(csv.split('\n')).toHaveLength(19);
       expect(csv).toContain('"deliveryAtRisk","0"');
     });
   });

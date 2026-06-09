@@ -32,6 +32,7 @@ function makeRepo() {
     list: jest.fn(),
     findLatestForProject: jest.fn(),
     portfolioMargin: jest.fn(),
+    costByCategory: jest.fn(),
   } as unknown as jest.Mocked<ProfitabilityRepository>;
 }
 
@@ -155,14 +156,27 @@ describe('ProfitabilityService', () => {
   describe('projectPnl', () => {
     it('expands the latest snapshot into a P&L shape (grossMargin = revenue - actualCost)', async () => {
       repo.findLatestForProject.mockResolvedValue(snapshot({ revenue: 1000, actualCost: 300 }));
+      repo.costByCategory.mockResolvedValue([]);
       const pnl = await service.projectPnl(ctx, 100);
       expect(pnl).toMatchObject({
         projectId: 100, revenue: 1000, actualCost: 300, grossMargin: 700, marginPct: 70,
       });
     });
-    it('404 when the project has no snapshot', async () => {
+    it('attaches the ledger cost broken down by category from the repo', async () => {
+      repo.findLatestForProject.mockResolvedValue(snapshot());
+      const byCat = [
+        { category: 'MATERIAL', amount: 300 },
+        { category: 'INSTALLATION', amount: 120 },
+      ];
+      repo.costByCategory.mockResolvedValue(byCat);
+      const pnl = await service.projectPnl(ctx, 100);
+      expect(repo.costByCategory).toHaveBeenCalledWith(ctx, 100);
+      expect(pnl.costByCategory).toEqual(byCat);
+    });
+    it('404 when the project has no snapshot (no cost-by-category lookup)', async () => {
       repo.findLatestForProject.mockResolvedValue(null);
       await expect(code(service.projectPnl(ctx, 100))).resolves.toBe(404);
+      expect(repo.costByCategory).not.toHaveBeenCalled();
     });
   });
 

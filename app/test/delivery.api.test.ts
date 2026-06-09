@@ -183,7 +183,9 @@ d('Delivery Prediction API (integration) — append-only forecast log, RBAC', ()
     expect(green.status).toBe(200);
     expect(green.body).toMatchObject({
       projectId: riskProject, riskLevel: 'GREEN', driver: null,
-      signals: { overduePurchaseOrders: 0, delayedWorkOrders: 0, pendingOrFailedFats: 0 },
+      signals: {
+        overduePurchaseOrders: 0, delayedWorkOrders: 0, pendingOrFailedFats: 0, resourceConstraints: 0,
+      },
     });
 
     // One overdue PO (APPROVED, expected_date in the past) -> Purchase Delay.
@@ -211,11 +213,42 @@ d('Delivery Prediction API (integration) — append-only forecast log, RBAC', ()
     const red = await request(app).get(`/api/delivery-forecasts/risk/${riskProject}`).set(hdr(planningUser));
     expect(red.status).toBe(200);
     expect(red.body.signals).toEqual({
-      overduePurchaseOrders: 1, delayedWorkOrders: 1, pendingOrFailedFats: 1,
+      // resourceConstraints is still 0 here — the past-due allocation is seeded below.
+      overduePurchaseOrders: 1, delayedWorkOrders: 1, pendingOrFailedFats: 1, resourceConstraints: 0,
     });
     expect(red.body.riskLevel).toBe('RED');       // a pending/failed FAT alone forces RED
     expect(red.body.driver).toBe('QUALITY');      // FAT is the largest signal
     expect(typeof red.body.asOf).toBe('string');
+
+    // One past-due, still-PLANNED resource allocation -> Resource Constraint (capacity
+    // not yet firmed for past-due work). Needs an employee (dept FK), so seed both.
+    const deptId = Number((await one(
+      `INSERT INTO hcm.department (company_id, dept_code, dept_name)
+       VALUES ($1, $2, 'DLV Risk Dept')
+       ON CONFLICT (company_id, dept_code) DO UPDATE SET dept_name = EXCLUDED.dept_name
+       RETURNING department_id`,
+      [companyId, `DLV-${stamp}`])).department_id);
+    const empId = Number((await one(
+      `INSERT INTO hcm.employee (company_id, emp_code, full_name, department_id, status)
+       VALUES ($1, $2, 'DLV Risk Engineer', $3, 'ACTIVE')
+       ON CONFLICT (emp_code) DO UPDATE SET department_id = EXCLUDED.department_id
+       RETURNING employee_id`,
+      [companyId, `ELV-${stamp}`, deptId])).employee_id);
+    await one(
+      `INSERT INTO hcm.resource_allocation
+         (company_id, employee_id, project_id, alloc_date, planned_hours, status)
+       VALUES ($1, $2, $3, CURRENT_DATE - 5, 4, 'PLANNED')`,
+      [companyId, empId, riskProject]);
+
+    // resourceConstraints now reads 1; still RED (FAT forces it) and still QUALITY-driven
+    // (fat=1 ties cap=1 and QUALITY outranks CAPACITY in the tie-break).
+    const withCap = await request(app).get(`/api/delivery-forecasts/risk/${riskProject}`).set(hdr(planningUser));
+    expect(withCap.status).toBe(200);
+    expect(withCap.body.signals).toEqual({
+      overduePurchaseOrders: 1, delayedWorkOrders: 1, pendingOrFailedFats: 1, resourceConstraints: 1,
+    });
+    expect(withCap.body.riskLevel).toBe('RED');
+    expect(withCap.body.driver).toBe('QUALITY');
 
     // SALES holds DELIVERY_FORECAST.VIEW, so the read is permitted (200, not 403).
     const asSales = await request(app).get(`/api/delivery-forecasts/risk/${riskProject}`).set(hdr(salesUser));

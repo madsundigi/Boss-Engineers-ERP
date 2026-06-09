@@ -90,6 +90,21 @@ d('Profitability API (integration) — append-only margin snapshots, RBAC', () =
               (current_date, $1, $2, 'MATERIAL', 'COMMITTED', $5, 'TEST', 1, $4)`,
       [companyId, projectId, ACTUAL_COST, financeUser, COMMITTED_COST]);
 
+    // Extra cost categories so the cost-by-category breakdown has >1 group. Seeded
+    // under the BUDGET stage so they do NOT perturb the stage-based snapshot
+    // (ACTUAL stays 300, COMMITTED stays 500 -> the existing margin/EAC assertions
+    // hold). The INSTALLATION row also asserts migration 052 widened ck_cost_type2
+    // (it would violate the original CHECK). cost-by-category sums across ALL stages:
+    // MATERIAL = 300 (ACTUAL) + 500 (COMMITTED) = 800, LABOUR = 150, FREIGHT = 60,
+    // INSTALLATION = 240.
+    await pool.query(
+      `INSERT INTO fin.project_cost_ledger
+         (posting_date, company_id, project_id, cost_type, cost_stage, amount, ref_doc_type, ref_doc_id, created_by)
+       VALUES (current_date, $1, $2, 'LABOUR',       'BUDGET', 150, 'TEST', 1, $3),
+              (current_date, $1, $2, 'FREIGHT',      'BUDGET',  60, 'TEST', 1, $3),
+              (current_date, $1, $2, 'INSTALLATION', 'BUDGET', 240, 'TEST', 1, $3)`,
+      [companyId, projectId, financeUser]);
+
     await pool.query(
       `INSERT INTO fin.invoice
          (company_id, invoice_no, project_id, customer_id, currency_id, taxable_amount, total_amount, status, created_by)
@@ -178,6 +193,21 @@ d('Profitability API (integration) — append-only margin snapshots, RBAC', () =
     expect(Number(res.body.actualCost)).toBe(ACTUAL_COST);
     // grossMargin = revenue - actualCost = 1000 - 300 = 700.
     expect(Number(res.body.grossMargin)).toBe(REVENUE - ACTUAL_COST);
+  });
+
+  it('breaks project cost down by category (cost_type) on the P&L, summing the ledger', async () => {
+    const res = await request(app).get(`/api/profitability/pnl/${projectId}`).set(hdr(financeUser));
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.costByCategory)).toBe(true);
+    // Fold the array into a {category: amount} map and assert the seeded sums.
+    const byCat: Record<string, number> = {};
+    for (const row of res.body.costByCategory) byCat[row.category] = Number(row.amount);
+    expect(byCat.MATERIAL).toBe(800);     // 300 ACTUAL + 500 COMMITTED
+    expect(byCat.LABOUR).toBe(150);
+    expect(byCat.FREIGHT).toBe(60);
+    expect(byCat.INSTALLATION).toBe(240); // the new category enabled by migration 052
+    // Ordered by amount DESC -> MATERIAL (the largest) leads.
+    expect(res.body.costByCategory[0].category).toBe('MATERIAL');
   });
 
   it('returns the portfolio margin view (200): one row per project, latest snapshot', async () => {

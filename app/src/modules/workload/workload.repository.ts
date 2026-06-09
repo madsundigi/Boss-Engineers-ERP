@@ -8,7 +8,8 @@ import { ListAllocationsDto, CapacityQueryDto } from './workload.dto';
 import { AllocationStatus, DEFAULT_DAILY_CAPACITY_HOURS } from './workload.constants';
 
 const ALLOC_COLS = `a.alloc_id, a.company_id, a.employee_id, e.full_name AS employee_name,
-  a.project_id, a.task_id, a.alloc_date, a.planned_hours, a.status,
+  d.dept_name AS department,
+  a.project_id, a.task_id, a.alloc_date, a.planned_hours, a.completion_pct, a.status,
   a.ref_type, a.ref_id, a.row_version`;
 
 const TS_COLS = `t.ts_id, t.company_id, t.employee_id, e.full_name AS employee_name,
@@ -21,10 +22,12 @@ function mapAllocation(r: QueryResultRow): Allocation {
     companyId: Number(r.company_id),
     employeeId: Number(r.employee_id),
     employeeName: r.employee_name ?? null,
+    department: r.department ?? null,
     projectId: Number(r.project_id),
     taskId: r.task_id == null ? null : Number(r.task_id),
     allocDate: r.alloc_date,
     plannedHours: Number(r.planned_hours),
+    completionPct: r.completion_pct == null ? null : Number(r.completion_pct),
     status: r.status,
     refType: r.ref_type ?? null,
     refId: r.ref_id == null ? null : Number(r.ref_id),
@@ -70,6 +73,7 @@ export interface CreateAllocationRow {
   plannedHours: number;
   refType?: string;
   refId?: number;
+  completionPct?: number;
 }
 
 export interface CreateTimesheetLineRow {
@@ -125,18 +129,21 @@ export class WorkloadRepository {
         `WITH ins AS (
            INSERT INTO hcm.resource_allocation
              (company_id, employee_id, project_id, task_id, alloc_date, planned_hours,
-              status, ref_type, ref_id)
-           VALUES ($1,$2,$3,$4,$5,$6,'PLANNED',$7,$8)
+              status, ref_type, ref_id, completion_pct)
+           VALUES ($1,$2,$3,$4,$5,$6,'PLANNED',$7,$8,$9)
            RETURNING alloc_id, company_id, employee_id, project_id, task_id,
-                     alloc_date, planned_hours, status, ref_type, ref_id, row_version
+                     alloc_date, planned_hours, completion_pct, status, ref_type, ref_id, row_version
          )
          SELECT a.alloc_id, a.company_id, a.employee_id, e.full_name AS employee_name,
-                a.project_id, a.task_id, a.alloc_date, a.planned_hours, a.status,
+                d.dept_name AS department,
+                a.project_id, a.task_id, a.alloc_date, a.planned_hours, a.completion_pct, a.status,
                 a.ref_type, a.ref_id, a.row_version
            FROM ins a
-           LEFT JOIN hcm.employee e ON e.employee_id = a.employee_id`,
+           LEFT JOIN hcm.employee e ON e.employee_id = a.employee_id
+           LEFT JOIN hcm.department d ON d.department_id = e.department_id`,
         [ctx.companyId, data.employeeId, data.projectId, data.taskId ?? null,
-          data.allocDate, data.plannedHours, data.refType ?? null, data.refId ?? null],
+          data.allocDate, data.plannedHours, data.refType ?? null, data.refId ?? null,
+          data.completionPct ?? null],
       );
       return mapAllocation(res.rows[0]);
     });
@@ -148,6 +155,7 @@ export class WorkloadRepository {
         `SELECT ${ALLOC_COLS}
            FROM hcm.resource_allocation a
            LEFT JOIN hcm.employee e ON e.employee_id = a.employee_id
+           LEFT JOIN hcm.department d ON d.department_id = e.department_id
           WHERE a.alloc_id = $1 AND a.company_id = $2`,
         [id, ctx.companyId],
       );
@@ -177,6 +185,7 @@ export class WorkloadRepository {
         `SELECT ${ALLOC_COLS}
            FROM hcm.resource_allocation a
            LEFT JOIN hcm.employee e ON e.employee_id = a.employee_id
+           LEFT JOIN hcm.department d ON d.department_id = e.department_id
           WHERE ${whereSql}
           ORDER BY a.${q.sort} ${q.dir.toUpperCase()}, a.alloc_id ${q.dir.toUpperCase()}
           LIMIT ${q.pageSize} OFFSET ${offset}`,
@@ -197,13 +206,15 @@ export class WorkloadRepository {
               SET status = $1, row_version = row_version + 1
             WHERE alloc_id = $2 AND company_id = $3 AND row_version = $4
             RETURNING alloc_id, company_id, employee_id, project_id, task_id,
-                      alloc_date, planned_hours, status, ref_type, ref_id, row_version
+                      alloc_date, planned_hours, completion_pct, status, ref_type, ref_id, row_version
          )
          SELECT a.alloc_id, a.company_id, a.employee_id, e.full_name AS employee_name,
-                a.project_id, a.task_id, a.alloc_date, a.planned_hours, a.status,
+                d.dept_name AS department,
+                a.project_id, a.task_id, a.alloc_date, a.planned_hours, a.completion_pct, a.status,
                 a.ref_type, a.ref_id, a.row_version
            FROM upd a
-           LEFT JOIN hcm.employee e ON e.employee_id = a.employee_id`,
+           LEFT JOIN hcm.employee e ON e.employee_id = a.employee_id
+           LEFT JOIN hcm.department d ON d.department_id = e.department_id`,
         [status, id, ctx.companyId, expectedVersion],
       );
       return res.rowCount ? mapAllocation(res.rows[0]) : null;

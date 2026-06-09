@@ -8,7 +8,7 @@ import { DOC_TYPE, NcrStatus, RcaMethod, CapaType, CapaStatus } from './failure.
 
 /** Header columns of qms.ncr (bu_id added in migration 016; the rest exist in db/04). */
 const H = `ncr_id, ncr_no, company_id, bu_id, source, source_doc_id, item_id, project_id,
-  failure_mode_id, severity, raised_date, status,
+  failure_mode_id, severity, cost_impact, raised_date, status,
   created_at, created_by, updated_at, row_version`;
 
 type Header = Omit<Ncr, 'rca' | 'capa'>;
@@ -25,6 +25,7 @@ function mapHeader(r: QueryResultRow): Header {
     projectId: r.project_id == null ? null : Number(r.project_id),
     failureModeId: r.failure_mode_id == null ? null : Number(r.failure_mode_id),
     severity: r.severity,
+    costImpact: r.cost_impact == null ? null : Number(r.cost_impact),
     raisedDate: r.raised_date,
     status: r.status,
     createdAt: r.created_at,
@@ -73,6 +74,7 @@ export interface NcrHeaderInput {
   projectId?: number;
   failureModeId?: number;
   severity?: string;
+  costImpact?: number;
   raisedDate?: string;
 }
 export interface RcaInput {
@@ -127,14 +129,14 @@ export class FailureRepository {
       const res = await c.query(
         `INSERT INTO qms.ncr
            (company_id, bu_id, ncr_no, source, source_doc_id, item_id, project_id,
-            failure_mode_id, severity, raised_date, status, created_by)
+            failure_mode_id, severity, cost_impact, raised_date, status, created_by)
          VALUES ($1,$2, mdm.next_document_no($1,$2,'${DOC_TYPE}'),
-                 $3,$4,$5,$6,$7,$8, COALESCE($9::date, current_date), 'OPEN', $10)
+                 $3,$4,$5,$6,$7,$8,$9, COALESCE($10::date, current_date), 'OPEN', $11)
          RETURNING ${H}`,
         [
           ctx.companyId, ctx.buId, h.source, h.sourceDocId ?? null, h.itemId ?? null,
           h.projectId ?? null, h.failureModeId ?? null, h.severity ?? null,
-          h.raisedDate ?? null, ctx.userId,
+          h.costImpact ?? null, h.raisedDate ?? null, ctx.userId,
         ]);
       const header = mapHeader(res.rows[0]);
       return { ...header, rca: [], capa: [] };
@@ -205,8 +207,9 @@ export class FailureRepository {
     const w = where.join(' AND ');
 
     return runRead(this.pool, ctx, async (c) => {
-      const res = await c.query<{ key: string | null; label: string | null; cnt: string }>(
-        `SELECT ${dim.key} AS key, ${dim.label} AS label, count(*)::text AS cnt
+      const res = await c.query<{ key: string | null; label: string | null; cnt: string; cost: string }>(
+        `SELECT ${dim.key} AS key, ${dim.label} AS label, count(*)::text AS cnt,
+                COALESCE(SUM(n.cost_impact), 0)::text AS cost
            FROM qms.ncr n
            ${dim.join}
           WHERE ${w}
@@ -218,6 +221,7 @@ export class FailureRepository {
         key: r.key == null ? null : (q.by === 'mode' ? Number(r.key) : r.key),
         label: r.label ?? '',
         count: Number(r.cnt),
+        totalCost: Number(r.cost),
       }));
     });
   }

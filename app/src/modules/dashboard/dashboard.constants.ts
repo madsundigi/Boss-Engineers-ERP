@@ -36,3 +36,17 @@ export const INVOICE_CLOSED_STATUSES = ['PAID', 'CANCELLED'] as const;
  * PENDING, MATCHED, APPROVED, PAID, DISPUTED). PAID is settled; DISPUTED is parked.
  */
 export const VENDOR_INVOICE_EXCLUDED_STATUSES = ['PAID', 'DISPUTED'] as const;
+
+/**
+ * Invoice statuses excluded from invoiced revenue: an invoice only counts toward
+ * revenue once it has been issued, so DRAFT (not issued) and CANCELLED (voided) are
+ * dropped; POSTED/SENT/PARTIALLY_PAID/PAID all count (fin.invoice ck_invoice_status).
+ */
+export const REVENUE_EXCLUDED_INVOICE_STATUSES = ['DRAFT', 'CANCELLED'] as const;
+
+/**
+ * Service-ticket statuses that have closed out a ticket (no longer "open"):
+ * RESOLVED + CLOSED. Any other status (OPEN, ASSIGNED, ON_SITE) is still open work
+ * (svc.service_ticket ck_ticket_status: OPEN, ASSIGNED, ON_SITE, RESOLVED, CLOSED).
+ */
+export const SERVICE_TICKET_CLOSED_STATUSES = ['RESOLVED', 'CLOSED'] as const;

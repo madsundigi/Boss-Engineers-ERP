@@ -18,6 +18,8 @@ export interface Installation {
   projectId: number;
   dispatchId: number | null;
   siteAddress: string | null;
+  siteEngineerId: number | null;
+  progressPct: number | null;
   plannedDate: string | null;
   actualDate: string | null;
   satResult: SatResult;

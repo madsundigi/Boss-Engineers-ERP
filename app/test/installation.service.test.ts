@@ -17,6 +17,7 @@ function installation(over: Partial<Installation> = {}): Installation {
   return {
     installId: 30, installNo: 'INST/MUM/2026-27/00030', companyId: 1, buId: 1,
     projectId: 100, dispatchId: 200, siteAddress: 'Plot 7, MIDC',
+    siteEngineerId: null, progressPct: null,
     plannedDate: '2026-06-10', actualDate: null, satResult: 'PENDING',
     acceptanceCertNo: null, acceptedDate: null, status: 'PLANNED',
     createdAt: 't', createdBy: 7, updatedAt: 't', rowVersion: 1,
@@ -64,6 +65,14 @@ describe('InstallationService', () => {
       expect(punchArg).toEqual([
         { description: 'door misaligned', severity: null, status: 'OPEN', closedDate: null },
       ]);
+    });
+    it('threads siteEngineerId into the repo header input', async () => {
+      const created = installation({ siteEngineerId: 42 });
+      repo.create.mockResolvedValue(created);
+      const out = await service.create(ctx, { projectId: 100, siteEngineerId: 42 });
+      expect(out.siteEngineerId).toBe(42);
+      const [, header] = repo.create.mock.calls[0];
+      expect(header).toMatchObject({ projectId: 100, siteEngineerId: 42 });
     });
     it('rejects (400) when no branch context to allocate a number', async () => {
       await expect(code(service.create({ ...ctx, buId: null }, { projectId: 100 }))).resolves.toBe(400);
@@ -192,6 +201,17 @@ describe('InstallationService', () => {
       repo.update.mockResolvedValue(installation({ status: 'IN_PROGRESS', siteAddress: 'New site', rowVersion: 2 }));
       const out = await service.update(ctx, 30, { rowVersion: 1, siteAddress: 'New site' });
       expect(out.siteAddress).toBe('New site');
+    });
+    it('threads progressPct + siteEngineerId through to the repo update fields', async () => {
+      repo.findById.mockResolvedValue(installation({ status: 'IN_PROGRESS' }));
+      repo.update.mockResolvedValue(installation({
+        status: 'IN_PROGRESS', siteEngineerId: 42, progressPct: 60, rowVersion: 2,
+      }));
+      const out = await service.update(ctx, 30, { rowVersion: 1, siteEngineerId: 42, progressPct: 60 });
+      expect(out.progressPct).toBe(60);
+      expect(out.siteEngineerId).toBe(42);
+      const [, , , fields] = repo.update.mock.calls[0];
+      expect(fields).toMatchObject({ siteEngineerId: 42, progressPct: 60 });
     });
     it('409 when COMMISSIONED (no longer editable)', async () => {
       repo.findById.mockResolvedValue(installation({ status: 'COMMISSIONED' }));

@@ -18,6 +18,8 @@ function mapStock(r: QueryResultRow): StockRow {
     itemId: Number(r.item_id),
     itemCode: r.item_code,
     itemName: r.item_name,
+    minLevel: r.min_level == null ? null : Number(r.min_level),
+    reorderLevel: r.reorder_level == null ? null : Number(r.reorder_level),
     warehouseId: Number(r.warehouse_id),
     warehouseCode: r.wh_code ?? null,
     binId: r.bin_id == null ? null : Number(r.bin_id),
@@ -137,6 +139,7 @@ export class InventoryRepository {
 
       const rowsRes = await c.query(
         `SELECT s.stock_id, s.company_id, s.item_id, i.item_code, i.item_name,
+                i.min_level, i.reorder_level,
                 s.warehouse_id, w.wh_code, s.bin_id, s.batch_id, s.project_id,
                 s.qty_on_hand, s.qty_reserved, s.qty_available, s.avg_cost, s.updated_at
            FROM scm.item_stock s

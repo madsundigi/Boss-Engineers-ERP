@@ -26,16 +26,20 @@ export interface DeliveryForecastListResult {
 }
 
 /**
- * Raw upstream delay signals for one project (the flowchart's three INPUTS):
- *   overduePurchaseOrders  — Purchase Delays   (scm.purchase_order),
- *   delayedWorkOrders      — Production Delays  (mfg.work_order),
- *   pendingOrFailedFats    — Resource/FAT Delays (qms.fat_execution).
+ * Raw upstream delay signals for one project (the flowchart's four INPUTS):
+ *   overduePurchaseOrders  — Purchase Delays      (scm.purchase_order),
+ *   delayedWorkOrders      — Production Delays     (mfg.work_order),
+ *   pendingOrFailedFats    — Resource/FAT Delays   (qms.fat_execution),
+ *   resourceConstraints    — Resource Constraints  (hcm.resource_allocation):
+ *                            still-PLANNED allocations whose alloc_date has passed
+ *                            (capacity not yet confirmed for past-due work).
  * Counts are company- and project-scoped; never negative.
  */
 export interface DeliveryRiskSignals {
   overduePurchaseOrders: number;
   delayedWorkOrders: number;
   pendingOrFailedFats: number;
+  resourceConstraints: number;
 }
 
 /**

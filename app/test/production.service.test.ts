@@ -14,7 +14,8 @@ function wo(over: Partial<WorkOrder> = {}): WorkOrder {
     woId: 10, woNo: 'WO/MUM/2026-27/000010', companyId: 1, buId: 1,
     projectId: 100, wbsId: null, itemId: 200, bomId: null, routingId: null,
     qty: 5, plannedStart: null, plannedEnd: null, actualStart: null, actualEnd: null,
-    status: 'PLANNED', createdAt: 't', createdBy: 9, updatedAt: 't', rowVersion: 1,
+    status: 'PLANNED', delayReason: null, percentComplete: null,
+    createdAt: 't', createdBy: 9, updatedAt: 't', rowVersion: 1,
     operations: [{ woOpId: 50, opSeq: 1, workCenterId: 1, stdTimeMin: 60, actualTimeMin: 0, status: 'PENDING' }],
     materials: [], confirmations: [], asBuilt: [], ...over,
   };
@@ -93,6 +94,17 @@ describe('ProductionService', () => {
       await service.update(ctx, 10, { rowVersion: 1, operations: [{ opSeq: 2, workCenterId: 3, stdTimeMin: 10 }] });
       const [, , , , ops] = repo.update.mock.calls[0];
       expect(ops).toEqual([{ opSeq: 2, workCenterId: 3, stdTimeMin: 10 }]);
+    });
+    it('threads progress metrics (delayReason / percentComplete) through to the header patch', async () => {
+      repo.findById.mockResolvedValue(wo());
+      repo.update.mockResolvedValue(wo({ delayReason: 'Material shortage', percentComplete: 40, rowVersion: 2 }));
+      const out = await service.update(ctx, 10, {
+        rowVersion: 1, delayReason: 'Material shortage', percentComplete: 40,
+      });
+      const [, , , headerFields] = repo.update.mock.calls[0];
+      expect(headerFields).toMatchObject({ delayReason: 'Material shortage', percentComplete: 40 });
+      expect(out.delayReason).toBe('Material shortage');
+      expect(out.percentComplete).toBe(40);
     });
   });
 
@@ -180,6 +192,18 @@ describe('ProductionService', () => {
       repo.updateStatus.mockResolvedValue(wo({ status: 'ON_HOLD', rowVersion: 2 }));
       const out = await service.changeStatus(ctx, 10, { status: 'ON_HOLD', rowVersion: 1 });
       expect(out.status).toBe('ON_HOLD');
+    });
+    it('captures delayReason / percentComplete in the status patch (e.g. on hold)', async () => {
+      repo.findById.mockResolvedValue(wo({ status: 'RELEASED' }));
+      repo.updateStatus.mockResolvedValue(wo({
+        status: 'ON_HOLD', delayReason: 'Awaiting parts', percentComplete: 25, rowVersion: 2,
+      }));
+      const out = await service.changeStatus(ctx, 10, {
+        status: 'ON_HOLD', rowVersion: 1, delayReason: 'Awaiting parts', percentComplete: 25,
+      });
+      expect(out.status).toBe('ON_HOLD');
+      const patchArg = repo.updateStatus.mock.calls[0][4];
+      expect(patchArg).toEqual({ delay_reason: 'Awaiting parts', percent_complete: 25 });
     });
   });
 });
