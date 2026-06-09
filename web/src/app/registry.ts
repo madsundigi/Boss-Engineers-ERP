@@ -85,6 +85,17 @@ export const SECTIONS: NavSection[] = [
       { path: 'allocations', label: 'Workload', endpoint: '/api/workload/allocations' },
     ],
   },
+  {
+    label: 'Master Data',
+    items: [
+      { path: 'items', label: 'Items', endpoint: '/api/items', idKey: 'itemId' },
+      { path: 'customers', label: 'Customers', endpoint: '/api/customers', idKey: 'customerId' },
+      { path: 'vendors', label: 'Vendors', endpoint: '/api/vendors', idKey: 'vendorId' },
+      { path: 'warehouses', label: 'Warehouses', endpoint: '/api/warehouses', idKey: 'warehouseId' },
+      { path: 'work-centers', label: 'Work Centres', endpoint: '/api/work-centers', idKey: 'wcId' },
+      { path: 'fat-protocols', label: 'FAT Protocols', endpoint: '/api/fat-protocols', idKey: 'protocolId' },
+    ],
+  },
 ];
 
 export const RESOURCES: ResourceDef[] = SECTIONS.flatMap((s) => s.items);
@@ -147,6 +158,13 @@ const WARRANTY_TERMS = ['12 Months from Commissioning', '12 Months from Dispatch
   '18 Months Dispatch / 12 Commissioning', '24 Months from Commissioning', '6 Months', 'No Warranty'];
 const CURRENCY = ['INR', 'USD', 'EUR'];
 const UOM = ['NOS', 'SET', 'PAIR', 'KG', 'MTR', 'LOT'];
+// Master-data pick-lists.
+const ITEM_TYPE = ['RAW', 'BOUGHT_OUT', 'SEMI_FIN', 'FINISHED', 'SERVICE', 'SPARE'];
+const CUSTOMER_TYPE = ['OEM', 'EPC', 'GOVT', 'DEALER', 'OTHER'];
+const CUSTOMER_STATUS = ['ACTIVE', 'HOLD', 'BLOCKED'];
+const VENDOR_STATUS = ['ACTIVE', 'HOLD', 'BLACKLISTED'];
+const TEST_TYPE = ['FAT', 'SAT'];
+const YES_NO = ['true', 'false'];
 
 /** Create-form field configs, keyed by resource path. Fields map 1:1 to the
  *  module's create DTO; FK references are entered as numeric ids (visible in
@@ -271,6 +289,50 @@ export const FORMS: Record<string, FormField[]> = {
       options: ['DRAWING', 'SPEC', 'CERTIFICATE', 'CONTRACT', 'REPORT', 'MANUAL', 'OTHER'] },
     { name: 'entityType', label: 'Linked Entity', placeholder: 'PROJECT, DISPATCH…' },
     { name: 'entityId', label: 'Linked Entity ID', type: 'number' },
+  ],
+  // ---- Master data -------------------------------------------------------
+  items: [
+    { name: 'itemCode', label: 'Item Code', required: true },
+    { name: 'itemName', label: 'Item Name', required: true },
+    { name: 'type', label: 'Type', type: 'select', options: ITEM_TYPE, required: true },
+    { name: 'categoryId', label: 'Category ID', type: 'number', required: true },
+    { name: 'baseUomId', label: 'Base UoM ID', type: 'number', required: true },
+    { name: 'reorderLevel', label: 'Reorder Level', type: 'number' },
+  ],
+  customers: [
+    { name: 'customerCode', label: 'Customer Code', required: true },
+    { name: 'customerName', label: 'Customer Name', required: true },
+    { name: 'customerType', label: 'Customer Type', type: 'select', options: CUSTOMER_TYPE },
+    { name: 'defaultCurrencyId', label: 'Default Currency ID', type: 'number', required: true },
+    { name: 'gstin', label: 'GSTIN' },
+    { name: 'pan', label: 'PAN' },
+    { name: 'creditLimit', label: 'Credit Limit', type: 'number' },
+    { name: 'status', label: 'Status', type: 'select', options: CUSTOMER_STATUS },
+  ],
+  vendors: [
+    { name: 'vendorCode', label: 'Vendor Code', required: true },
+    { name: 'vendorName', label: 'Vendor Name', required: true },
+    { name: 'gstin', label: 'GSTIN' },
+    { name: 'pan', label: 'PAN' },
+    { name: 'isApproved', label: 'Approved (usable on POs)?', type: 'select', options: YES_NO },
+    { name: 'status', label: 'Status', type: 'select', options: VENDOR_STATUS },
+  ],
+  warehouses: [
+    { name: 'buId', label: 'Business Unit ID', type: 'number', required: true },
+    { name: 'whCode', label: 'Warehouse Code', required: true },
+    { name: 'whName', label: 'Warehouse Name', required: true },
+  ],
+  'work-centers': [
+    { name: 'buId', label: 'Business Unit ID', type: 'number', required: true },
+    { name: 'wcCode', label: 'Work Centre Code', required: true },
+    { name: 'wcName', label: 'Work Centre Name', required: true },
+    { name: 'capacityPerDay', label: 'Capacity / Day', type: 'number' },
+    { name: 'costRate', label: 'Cost Rate', type: 'number' },
+  ],
+  'fat-protocols': [
+    { name: 'protocolCode', label: 'Protocol Code', required: true },
+    { name: 'protocolName', label: 'Protocol Name', required: true },
+    { name: 'testType', label: 'Test Type', type: 'select', options: TEST_TYPE },
   ],
 };
 

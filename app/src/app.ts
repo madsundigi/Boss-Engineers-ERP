@@ -44,6 +44,12 @@ import { documentRouter } from './modules/dms/dms.routes';
 import { crmRouter } from './modules/crm/crm.routes';
 import { portalRouter } from './modules/portal/portal.routes';
 import { searchRouter } from './modules/search/search.routes';
+import { itemsRouter } from './modules/items/items.routes';
+import { vendorsRouter } from './modules/vendors/vendors.routes';
+import { warehousesRouter } from './modules/warehouses/warehouses.routes';
+import { customersRouter } from './modules/customers/customers.routes';
+import { workCentersRouter } from './modules/workcenters/workcenters.routes';
+import { fatProtocolRouter } from './modules/fatprotocol/fatprotocol.routes';
 import {
   invoicePostedGlHandler, paymentReceivedGlHandler, vendorInvoiceApprovedGlHandler,
 } from './modules/gl/gl.handlers';
@@ -128,6 +134,14 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
   app.use('/api/crm', crmRouter(pool));            // CRM pipeline + activities
   app.use('/api/portal', portalRouter(pool));      // customer/vendor self-service portal
   app.use('/api/search', searchRouter(pool));      // central cross-entity search (lifecycle traceability)
+
+  // Master data management (catalog the client maintains: items, suppliers, stores, etc.)
+  app.use('/api/items', itemsRouter(pool));
+  app.use('/api/vendors', vendorsRouter(pool));
+  app.use('/api/warehouses', warehousesRouter(pool));
+  app.use('/api/customers', customersRouter(pool));
+  app.use('/api/work-centers', workCentersRouter(pool));
+  app.use('/api/fat-protocols', fatProtocolRouter(pool));
 
   // Transactional outbox relay: dispatches committed domain events (e.g. emails
   // the quotation PDF on 'quotation.sent'). Exposed for the server poller and tests.

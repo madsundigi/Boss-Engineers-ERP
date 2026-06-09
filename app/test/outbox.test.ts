@@ -9,6 +9,10 @@ d('OutboxRelay (transactional outbox)', () => {
   let pool: Pool;
   beforeAll(() => { pool = new Pool({ connectionString: process.env.DATABASE_URL }); });
   afterAll(async () => { await pool.end(); });
+  // Other suites leave inert PENDING events in the shared test outbox; clear them so
+  // this suite's bounded drain() reliably reaches its own freshly-inserted event
+  // (no test relies on the relay processing those — they're never drained in tests).
+  beforeEach(async () => { await pool.query(`DELETE FROM mdm.outbox_event WHERE status = 'PENDING'`); });
 
   async function insertEvent(type: string, maxAttempts = 5): Promise<number> {
     const r = await pool.query(
