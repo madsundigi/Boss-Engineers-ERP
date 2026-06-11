@@ -18,6 +18,11 @@ function idOf(req: Request): number {
   if (!Number.isInteger(id) || id <= 0) throw Errors.badRequest('Invalid id');
   return id;
 }
+function projectIdOf(req: Request): number {
+  const id = Number(req.params.projectId);
+  if (!Number.isInteger(id) || id <= 0) throw Errors.badRequest('Invalid project id');
+  return id;
+}
 
 export class BillingController {
   constructor(private readonly service: BillingService) {}
@@ -29,6 +34,14 @@ export class BillingController {
 
   create = async (req: Request, res: Response) => {
     const created = await this.service.create(ctxOf(req), valid<CreateInvoiceDto>(req));
+    res.status(201).json(created);
+  };
+
+  // One-click: create a DRAFT invoice pre-filled from a project (customer +
+  // currency + a milestone/contract-value line). 404 if the project is not in
+  // the caller's company. INVOICE.CREATE (gated on the route).
+  fromProject = async (req: Request, res: Response) => {
+    const created = await this.service.fromProject(ctxOf(req), projectIdOf(req));
     res.status(201).json(created);
   };
 

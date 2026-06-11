@@ -10,6 +10,14 @@ export interface ResourceDef {
   columns?: { key: string; label: string; kind?: 'num' | 'mono' | 'status' | 'date' }[];
   /** the row's primary-key field (e.g. 'enquiryId'); derived from the row when omitted */
   idKey?: string;
+  /** one-click "carry forward" buttons rendered per row (e.g. Enquiry → Quote). */
+  rowActions?: RowActionDef[];
+}
+
+/** A one-click action on a row that creates the next document from this one. */
+export interface RowActionDef {
+  label: string;
+  kind: 'enquiryToQuote' | 'receivePo' | 'invoiceFromProject';
 }
 
 export interface NavSection {
@@ -21,7 +29,8 @@ export const SECTIONS: NavSection[] = [
   {
     label: 'Sales & CRM',
     items: [
-      { path: 'enquiries', label: 'Enquiries', endpoint: '/api/enquiries', idKey: 'enquiryId' },
+      { path: 'enquiries', label: 'Enquiries', endpoint: '/api/enquiries', idKey: 'enquiryId',
+        rowActions: [{ label: '→ Quote', kind: 'enquiryToQuote' }] },
       { path: 'opportunities', label: 'Opportunities', endpoint: '/api/crm/opportunities', idKey: 'oppId' },
       { path: 'quotations', label: 'Quotations', endpoint: '/api/quotations', idKey: 'quotationId' },
       { path: 'contracts', label: 'Contracts', endpoint: '/api/contracts' },
@@ -30,7 +39,8 @@ export const SECTIONS: NavSection[] = [
   {
     label: 'Projects',
     items: [
-      { path: 'projects', label: 'Projects', endpoint: '/api/projects', idKey: 'projectId' },
+      { path: 'projects', label: 'Projects', endpoint: '/api/projects', idKey: 'projectId',
+        rowActions: [{ label: '+ Raise Invoice', kind: 'invoiceFromProject' }] },
       { path: 'change-orders', label: 'Change Orders', endpoint: '/api/change-orders', idKey: 'changeOrderId' },
       { path: 'delivery-forecasts', label: 'Delivery Forecasts', endpoint: '/api/delivery-forecasts', idKey: 'forecastId' },
     ],
@@ -193,6 +203,15 @@ export const FORMS: Record<string, FormField[]> = {
     { name: 'pmUserId', label: 'PM User ID', type: 'number', required: true },
     { name: 'contractValue', label: 'Contract Value', type: 'number' },
     { name: 'budgetCost', label: 'Budget Cost', type: 'number' },
+    { name: 'plannedStart', label: 'Planned Start', type: 'date' },
+    { name: 'plannedEnd', label: 'Planned End', type: 'date' },
+  ],
+  'work-orders': [
+    { name: 'projectId', label: 'Project ID', type: 'number', required: true },
+    { name: 'itemId', label: 'Machine / Item ID', type: 'number', required: true },
+    { name: 'qty', label: 'Quantity', type: 'number', required: true },
+    { name: 'bomId', label: 'BOM ID — auto-fills materials', type: 'number' },
+    { name: 'routingId', label: 'Routing ID — auto-fills operations', type: 'number' },
     { name: 'plannedStart', label: 'Planned Start', type: 'date' },
     { name: 'plannedEnd', label: 'Planned End', type: 'date' },
   ],

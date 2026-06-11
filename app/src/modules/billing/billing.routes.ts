@@ -102,6 +102,13 @@ export function billingRouter(pool: Pool): Router {
     validate(createInvoiceSchema),
     asyncHandler(controller.create));
 
+  // One-click "Raise Invoice from a project": create a DRAFT invoice pre-filled
+  // from the project (customer + currency + a milestone / contract-value line).
+  // Declared BEFORE '/:id' so 'from-project' is not captured as an invoice id.
+  r.post('/from-project/:projectId',
+    requirePermission(P.CREATE),
+    asyncHandler(controller.fromProject));
+
   r.get('/:id',
     requirePermission(P.VIEW),
     asyncHandler(controller.getById));

@@ -62,6 +62,29 @@ describe('ProductionService', () => {
       expect(data.operations).toEqual([{ opSeq: 1, workCenterId: 7, stdTimeMin: 30 }]);
       expect(data.materials).toEqual([{ itemId: 300, requiredQty: 12 }]);
     });
+    it('threads bomId/routingId through but leaves operations/materials undefined when none supplied (repo auto-fills)', async () => {
+      // The BOM-explode / routing-load happens in the repository (it reads the DB),
+      // so the service must NOT coerce an absent collection into [] — it has to stay
+      // undefined so the repo knows to auto-fill from bom_id / routing_id.
+      repo.create.mockResolvedValue(wo());
+      await service.create(ctx, { projectId: 100, itemId: 200, qty: 5, bomId: 77, routingId: 88 });
+      const [, data] = repo.create.mock.calls[0];
+      expect(data.bomId).toBe(77);
+      expect(data.routingId).toBe(88);
+      expect(data.materials).toBeUndefined();
+      expect(data.operations).toBeUndefined();
+    });
+    it('passes explicit materials/operations through even when a bomId/routingId is also given (explicit wins)', async () => {
+      repo.create.mockResolvedValue(wo());
+      await service.create(ctx, {
+        projectId: 100, itemId: 200, qty: 5, bomId: 77, routingId: 88,
+        operations: [{ opSeq: 2, workCenterId: 9, stdTimeMin: 15 }],
+        materials: [{ itemId: 301, requiredQty: 4 }],
+      });
+      const [, data] = repo.create.mock.calls[0];
+      expect(data.materials).toEqual([{ itemId: 301, requiredQty: 4 }]);
+      expect(data.operations).toEqual([{ opSeq: 2, workCenterId: 9, stdTimeMin: 15 }]);
+    });
     it('rejects (400) when no branch context to allocate a number', async () => {
       await expect(code(service.create({ ...ctx, buId: null }, { projectId: 100, itemId: 200, qty: 5 }))).resolves.toBe(400);
       expect(repo.create).not.toHaveBeenCalled();

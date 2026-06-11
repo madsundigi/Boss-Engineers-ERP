@@ -4,7 +4,7 @@ import { valid } from '../../common/validate';
 import { Errors } from '../../common/http-error';
 import { RequestContext } from '../../common/request-context';
 import {
-  CreatePrDto, CreatePoDto, ReceiveGrnDto,
+  CreatePrDto, CreatePoDto, ReceiveGrnDto, ReceiveAllDto,
   PrListQueryDto, PoListQueryDto, GrnListQueryDto,
 } from './procurement.dto';
 
@@ -13,6 +13,7 @@ function num(v: string, label: string): number {
   const n = Number(v); if (!Number.isInteger(n) || n <= 0) throw Errors.badRequest(`Invalid ${label}`); return n;
 }
 const idOf = (req: Request) => num(req.params.id, 'id');
+const poIdOf = (req: Request) => num(req.params.poId, 'poId');
 const ver = (req: Request) => valid<{ rowVersion: number }>(req).rowVersion;
 
 export class ProcurementController {
@@ -53,6 +54,10 @@ export class ProcurementController {
 
   receiveGrn = async (req: Request, res: Response) =>
     res.status(201).json(await this.service.receiveGrn(ctxOf(req), valid<ReceiveGrnDto>(req)));
+
+  // One-click: receive ALL outstanding qty on a PO as a single GRN.
+  receiveAllFromPo = async (req: Request, res: Response) =>
+    res.status(201).json(await this.service.receiveAllFromPo(ctxOf(req), poIdOf(req), valid<ReceiveAllDto>(req)));
 
   getGrn = async (req: Request, res: Response) =>
     res.json(await this.service.getGrn(ctxOf(req), idOf(req)));

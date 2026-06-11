@@ -82,6 +82,19 @@ function mapAsBuilt(r: QueryResultRow): AsBuiltSerial {
   };
 }
 
+/**
+ * Round to the storage scale of mfg.work_order_material.required_qty
+ * (NUMERIC(20,4) — 4 dp). Used when scaling a BOM component's qty_per by the WO
+ * qty + scrap factor so (a) binary-float noise (e.g. 0.1 * 3) never leaks into the
+ * requirement and (b) the value we return matches what Postgres stores (it would
+ * round the insert to 4 dp regardless), keeping the hydrated WO consistent.
+ */
+const QTY_SCALE = 4;
+function roundQty(n: number): number {
+  const f = 10 ** QTY_SCALE;
+  return Math.round((n + Number.EPSILON) * f) / f;
+}
+
 export interface CreateWorkOrderRow {
   projectId: number;
   itemId: number;
@@ -156,6 +169,63 @@ export class ProductionRepository {
     return res.rows.map(mapAsBuilt);
   }
 
+  /**
+   * Explode a RELEASED BOM into work-order material requirement lines, scaled to
+   * the WO quantity. For each component line:
+   *   requiredQty = qty_per * woQty * (1 + scrap_pct/100)
+   * rounded to the required_qty storage scale (4 dp — see {@link roundQty}) so
+   * float noise never leaks into the stored quantity.
+   *
+   * Company-scoped via mdm.bom_header.company_id (RLS also enforces this for the
+   * erp_app role; the explicit predicate keeps it correct for the owner/superuser
+   * used by tests + migrations). Only a RELEASED BOM is usable — a DRAFT/OBSOLETE
+   * (or cross-tenant / missing) BOM yields no lines, so the caller falls back to no
+   * auto-fill rather than seeding a WO from a non-baseline bill. mdm.bom_line carries
+   * no company_id; it is reached through the header join.
+   */
+  private async explodeBom(
+    q: Queryable, companyId: number, bomId: number, woQty: number,
+  ): Promise<{ itemId: number; requiredQty: number }[]> {
+    const res = await q.query(
+      `SELECT l.component_item_id, l.qty_per, l.scrap_pct
+         FROM mdm.bom_line l
+         JOIN mdm.bom_header h ON h.bom_id = l.bom_id
+        WHERE l.bom_id = $1 AND h.company_id = $2
+          AND h.status = 'RELEASED' AND NOT h.is_deleted
+        ORDER BY l.bom_line_id`,
+      [bomId, companyId]);
+    return res.rows.map((r) => ({
+      itemId: Number(r.component_item_id),
+      requiredQty: roundQty(Number(r.qty_per) * woQty * (1 + Number(r.scrap_pct) / 100)),
+    }));
+  }
+
+  /**
+   * Load an active routing's operations as work-order operation lines. Routing has
+   * no company_id of its own; it is tenant-scoped through its item
+   * (mdm.routing.item_id -> mdm.item.company_id), mirroring how work centres scope
+   * via their business unit. Only an active routing is used; an inactive / missing /
+   * cross-tenant routing yields no operations, so the caller falls back to no
+   * auto-fill.
+   */
+  private async routingOps(
+    q: Queryable, companyId: number, routingId: number,
+  ): Promise<{ opSeq: number; workCenterId: number; stdTimeMin: number }[]> {
+    const res = await q.query(
+      `SELECT o.op_seq, o.work_center_id, o.std_time_min
+         FROM mdm.routing_operation o
+         JOIN mdm.routing r ON r.routing_id = o.routing_id
+         JOIN mdm.item i ON i.item_id = r.item_id
+        WHERE o.routing_id = $1 AND i.company_id = $2 AND r.is_active
+        ORDER BY o.op_seq`,
+      [routingId, companyId]);
+    return res.rows.map((r) => ({
+      opSeq: Number(r.op_seq),
+      workCenterId: Number(r.work_center_id),
+      stdTimeMin: Number(r.std_time_min),
+    }));
+  }
+
   private async insertOperations(
     q: Queryable, id: number, ops: NonNullable<CreateWorkOrderRow['operations']>,
   ): Promise<void> {
@@ -205,8 +275,24 @@ export class ProductionRepository {
           data.delayReason ?? null, data.percentComplete ?? null, ctx.userId,
         ]);
       const header = mapHeader(res.rows[0]);
-      if (data.operations?.length) await this.insertOperations(c, header.woId, data.operations);
-      if (data.materials?.length) await this.insertMaterials(c, header.woId, data.materials);
+
+      // Auto-fill from the chosen BOM / routing when the caller supplied no explicit
+      // lines: a bomId with no materials explodes the BOM into material requirements
+      // (scaled to qty, scrap applied); a routingId with no operations loads the
+      // routing's operations. Explicit dto lines always win — auto-fill triggers only
+      // when the collection is absent (undefined), never overwriting a supplied one
+      // (even an intentional empty []). Runs inside this same transaction so the WO +
+      // its derived children commit atomically; a non-usable (DRAFT/inactive/missing)
+      // BOM or routing simply yields nothing — no crash, no partial WO.
+      const ops = data.operations === undefined && data.routingId
+        ? await this.routingOps(c, ctx.companyId, data.routingId)
+        : data.operations;
+      const mats = data.materials === undefined && data.bomId
+        ? await this.explodeBom(c, ctx.companyId, data.bomId, data.qty)
+        : data.materials;
+
+      if (ops?.length) await this.insertOperations(c, header.woId, ops);
+      if (mats?.length) await this.insertMaterials(c, header.woId, mats);
       if (event) await emitOutbox(c, event);
       return this.hydrate(c, header);
     });

@@ -136,6 +136,84 @@ d('Procurement API (integration) — GRN posts inventory stock', () => {
     expect(Number(bal.rows[0].on_hand)).toBeGreaterThanOrEqual(RECEIVE_QTY);
   });
 
+  it('one-click receive: POST /purchase-orders/:poId/receive takes in ALL outstanding qty, second call 409s', async () => {
+    const FULL_QTY = 9;
+
+    // Buyer raises + CEO approves a fresh PO (independent lines from the other test).
+    const createPo = await request(app).post('/api/procurement/purchase-orders').set(hdr(purchaseUser)).send({
+      vendorId,
+      lines: [{ itemId, qty: FULL_QTY, unitRate: UNIT_RATE }],
+    });
+    expect(createPo.status).toBe(201);
+    const poId = createPo.body.poId as number;
+    const poLineId = createPo.body.lines[0].poLineId as number;
+
+    const approve = await request(app).post(`/api/procurement/purchase-orders/${poId}/approve`).set(hdr(ceoUser))
+      .send({ rowVersion: createPo.body.rowVersion });
+    expect(approve.status).toBe(200);
+
+    // No warehouse in the body -> the GRN lands in the bu's default warehouse, which
+    // defaultWarehouseForBu resolves as the first active warehouse by id (not
+    // necessarily this suite's fixture — the inventory suite seeds a lower-id one).
+    const defWh = Number((await pool.query<{ warehouse_id: string }>(
+      `SELECT warehouse_id FROM mdm.warehouse WHERE bu_id=$1 AND is_active ORDER BY warehouse_id LIMIT 1`,
+      [buId],
+    )).rows[0].warehouse_id);
+
+    // Baselines: on-hand balance + GRN ledger count for the item BEFORE the receive.
+    const balBefore = await pool.query<{ on_hand: string | null }>(
+      `SELECT qty_on_hand AS on_hand FROM scm.item_stock
+        WHERE company_id=$1 AND item_id=$2 AND warehouse_id=$3`, [companyId, itemId, defWh]);
+    const onHandBefore = balBefore.rowCount ? Number(balBefore.rows[0].on_hand) : 0;
+    const ledgerBefore = await pool.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM scm.stock_transaction
+        WHERE company_id=$1 AND item_id=$2 AND txn_type='GRN'`, [companyId, itemId]);
+
+    // One click, NO body: warehouse defaults to the bu's first active warehouse.
+    const recv = await request(app).post(`/api/procurement/purchase-orders/${poId}/receive`).set(hdr(storesUser)).send();
+    expect(recv.status).toBe(201);
+    expect(recv.body.status).toBe('POSTED');                 // same shape as a manual GRN create
+    expect(recv.body.poId).toBe(poId);
+    const grnId = recv.body.grnId as number;
+    // The GRN received the FULL outstanding qty on the only line, in the default warehouse.
+    expect(recv.body.lines).toHaveLength(1);
+    expect(recv.body.lines[0].poLineId).toBe(poLineId);
+    expect(Number(recv.body.lines[0].receivedQty)).toBe(FULL_QTY);
+    expect(Number(recv.body.lines[0].warehouseId)).toBe(defWh);
+
+    // Stock ledger: exactly one new positive 'GRN' row carrying the full qty + GRN ref.
+    const ledgerAfter = await pool.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM scm.stock_transaction
+        WHERE company_id=$1 AND item_id=$2 AND txn_type='GRN'`, [companyId, itemId]);
+    expect(ledgerAfter.rows[0].n).toBe(ledgerBefore.rows[0].n + 1);
+    const txn = await pool.query(
+      `SELECT qty, warehouse_id, ref_doc_id FROM scm.stock_transaction
+        WHERE ref_doc_type='GRN' AND ref_doc_id=$1`, [grnId]);
+    expect(txn.rowCount).toBe(1);
+    expect(Number(txn.rows[0].qty)).toBe(FULL_QTY);
+    expect(Number(txn.rows[0].warehouse_id)).toBe(defWh);
+
+    // On-hand BALANCE rolled up by the full qty.
+    const balAfter = await pool.query<{ on_hand: string }>(
+      `SELECT qty_on_hand AS on_hand FROM scm.item_stock
+        WHERE company_id=$1 AND item_id=$2 AND warehouse_id=$3`, [companyId, itemId, defWh]);
+    expect(Number(balAfter.rows[0].on_hand)).toBe(onHandBefore + FULL_QTY);
+
+    // po_line.received_qty now equals the ordered qty (line fully closed).
+    const line = await pool.query<{ received_qty: string }>(
+      `SELECT received_qty FROM scm.po_line WHERE po_line_id=$1`, [poLineId]);
+    expect(Number(line.rows[0].received_qty)).toBe(FULL_QTY);
+
+    // Second one-click: nothing left to receive -> 409.
+    const again = await request(app).post(`/api/procurement/purchase-orders/${poId}/receive`).set(hdr(storesUser)).send();
+    expect(again.status).toBe(409);
+  });
+
+  it('one-click receive denies without GRN.CREATE (403) as sales_user', async () => {
+    const res = await request(app).post('/api/procurement/purchase-orders/1/receive').set(hdr(salesUser)).send();
+    expect(res.status).toBe(403);
+  });
+
   it('denies receiving a GRN without GRN.CREATE (403) as sales_user', async () => {
     // sales_user holds no GRN permission, so the receive is blocked at the guard.
     const res = await request(app).post('/api/procurement/grn').set(hdr(salesUser)).send({

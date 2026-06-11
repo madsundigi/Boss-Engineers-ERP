@@ -133,6 +133,23 @@ export interface InvoiceHeaderInput {
   totalAmount: number;
 }
 
+/** Billing essentials inferred from a project (service.fromProject pre-fill). */
+export interface ProjectInvoiceBasis {
+  projectNo: string;
+  customerId: number;
+  contractValue: number;
+  defaultCurrencyId: number;
+}
+
+/** The next pending billing milestone for a project (line content + optional FK).
+ *  milestoneId is set only when sourced from proj.milestone (the fin.invoice FK
+ *  target); it is undefined when sourced from the contract schedule. */
+export interface MilestoneBasis {
+  milestoneId?: number;
+  name: string;
+  amount: number;
+}
+
 /** A receipt the service has validated, ready to persist with its allocations. */
 export interface ReceiptInput {
   customerId: number;
@@ -166,6 +183,91 @@ export class BillingRepository {
     return runRead(this.pool, ctx, async (c) => {
       const res = await c.query(`SELECT currency_id FROM mdm.currency WHERE iso_code = 'INR'`);
       return res.rowCount ? Number(res.rows[0].currency_id) : null;
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // "Raise invoice from a project" read helpers (used by service.fromProject).
+  // ---------------------------------------------------------------------
+  /**
+   * Resolve the billing essentials for a project, scoped to the company: its
+   * customer, that customer's default currency, the contract value (the placeholder
+   * line amount) and the project_no (the placeholder line description). Returns
+   * null when the project does not exist in this company (-> 404 in the service).
+   */
+  async findProjectForInvoice(
+    ctx: RequestContext, projectId: number,
+  ): Promise<ProjectInvoiceBasis | null> {
+    return runRead(this.pool, ctx, async (c) => {
+      const res = await c.query(
+        `SELECT p.project_no, p.customer_id, p.contract_value, cu.default_currency_id
+           FROM proj.project p
+           JOIN mdm.customer cu ON cu.customer_id = p.customer_id
+          WHERE p.project_id = $1 AND p.company_id = $2 AND NOT p.is_deleted`,
+        [projectId, ctx.companyId]);
+      if (!res.rowCount) return null;
+      const r = res.rows[0];
+      return {
+        projectNo: r.project_no as string,
+        customerId: Number(r.customer_id),
+        contractValue: Number(r.contract_value),
+        defaultCurrencyId: Number(r.default_currency_id),
+      };
+    });
+  }
+
+  /**
+   * Find the next pending billing milestone to invoice for a project. Two sources,
+   * in priority order:
+   *   1. proj.milestone — a PENDING payment/billing milestone (the only milestone
+   *      whose id is a valid fin.invoice.milestone_id FK, so `milestoneId` is set).
+   *   2. sales.customer_contract -> sales.contract_milestone — the contract billing
+   *      schedule the installation.accepted handler reads. Its id is NOT a
+   *      proj.milestone FK, so only its name/amount feed the line (milestoneId left
+   *      null to avoid an FK violation).
+   * "Next" = earliest by sort_order then id (the first unbilled milestone). Both are
+   * scoped to the company (proj.milestone via its project; the contract directly).
+   * Returns null when neither source has a pending milestone.
+   */
+  async findNextPendingMilestone(
+    ctx: RequestContext, projectId: number,
+  ): Promise<MilestoneBasis | null> {
+    return runRead(this.pool, ctx, async (c) => {
+      const proj = await c.query(
+        `SELECT m.milestone_id, m.name, COALESCE(m.bill_amount, 0) AS amount
+           FROM proj.milestone m
+           JOIN proj.project p ON p.project_id = m.project_id
+          WHERE m.project_id = $1 AND p.company_id = $2
+            AND m.status = 'PENDING'
+            AND (m.is_payment_milestone OR m.bill_amount IS NOT NULL)
+          ORDER BY m.milestone_id ASC
+          LIMIT 1`,
+        [projectId, ctx.companyId]);
+      if (proj.rowCount) {
+        const r = proj.rows[0];
+        return {
+          milestoneId: Number(r.milestone_id), // valid proj.milestone FK
+          name: r.name as string,
+          amount: Number(r.amount),
+        };
+      }
+      // Fall back to the contract billing schedule (same source as the
+      // installation.accepted handler), but do NOT set milestoneId (not a
+      // proj.milestone id, so it would break the fin.invoice FK).
+      const con = await c.query(
+        `SELECT m.name, m.amount
+           FROM sales.customer_contract cc
+           JOIN sales.contract_milestone m ON m.contract_id = cc.contract_id
+          WHERE cc.project_id = $1 AND cc.company_id = $2 AND NOT cc.is_deleted
+            AND m.status = 'PENDING'
+          ORDER BY m.sort_order ASC NULLS LAST, m.milestone_id ASC
+          LIMIT 1`,
+        [projectId, ctx.companyId]);
+      if (con.rowCount) {
+        const r = con.rows[0];
+        return { milestoneId: undefined, name: r.name as string, amount: Number(r.amount) };
+      }
+      return null;
     });
   }
 

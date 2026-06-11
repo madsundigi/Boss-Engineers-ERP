@@ -224,4 +224,75 @@ d('Billing/AR API (integration) — invoices, receipts, retention, RBAC', () => 
       .send({ rowVersion: create.body.rowVersion });
     expect(stale.status).toBe(409);
   });
+
+  // -------------------------------------------------------------------
+  // One-click "Raise Invoice from a project" — POST /from-project/:projectId.
+  // Pre-fills customer (from the project) + currency (the customer's default) and
+  // a line from either the next PENDING billing milestone or the contract value.
+  // -------------------------------------------------------------------
+  it('raises a DRAFT invoice from a project with NO milestone — placeholder line from contract_value', async () => {
+    // Dedicated project carrying a contract_value but no billing milestone.
+    const proj = await pool.query(
+      `INSERT INTO proj.project (company_id, project_no, project_name, customer_id, pm_user_id, status, contract_value)
+       VALUES ($1, 'PRJ-BILL-FP1', 'From-Project (no milestone)', $2, $3, 'ACTIVE', 7500)
+       ON CONFLICT (project_no) DO UPDATE SET contract_value = EXCLUDED.contract_value
+       RETURNING project_id`, [companyId, customerId, financeUser]);
+    const pid = Number(proj.rows[0].project_id);
+
+    const res = await request(app).post(`/api/invoices/from-project/${pid}`).set(hdr(financeUser)).send({});
+    expect(res.status).toBe(201);
+    expect(res.body.invoiceNo).toMatch(/^INV\//);
+    expect(res.body.status).toBe('DRAFT');
+    expect(res.body.customerId).toBe(customerId); // inferred from the project
+    expect(res.body.currencyId).toBe(currencyId); // inferred from the customer's default
+    expect(res.body.projectId).toBe(pid);
+    expect(res.body.milestoneId).toBeNull(); // no billing milestone -> placeholder line
+    expect(res.body.lines).toHaveLength(1);
+    expect(res.body.lines[0].description).toBe('Project PRJ-BILL-FP1');
+    expect(Number(res.body.lines[0].unitRate)).toBe(7500);
+    expect(Number(res.body.totalAmount)).toBe(7500);
+  });
+
+  it('raises a DRAFT invoice from a project WITH a pending proj.milestone — line + milestoneId from it', async () => {
+    const proj = await pool.query(
+      `INSERT INTO proj.project (company_id, project_no, project_name, customer_id, pm_user_id, status, contract_value)
+       VALUES ($1, 'PRJ-BILL-FP2', 'From-Project (milestone)', $2, $3, 'ACTIVE', 99999)
+       ON CONFLICT (project_no) DO UPDATE SET contract_value = EXCLUDED.contract_value
+       RETURNING project_id`, [companyId, customerId, financeUser]);
+    const pid = Number(proj.rows[0].project_id);
+    // A PENDING payment milestone — its name/bill_amount drive the single line and
+    // its id (a proj.milestone FK target) is stamped on the invoice. Seed
+    // idempotently: reuse the existing milestone on a repeat run (a prior run's
+    // invoice references it via fin.invoice.milestone_id, so it cannot be deleted),
+    // which also keeps the expected milestone_id stable.
+    const existing = await pool.query(
+      `SELECT milestone_id FROM proj.milestone
+        WHERE project_id = $1 AND name = 'Advance on PO' ORDER BY milestone_id LIMIT 1`, [pid]);
+    const milestoneId = existing.rowCount
+      ? Number(existing.rows[0].milestone_id)
+      : Number((await pool.query(
+        `INSERT INTO proj.milestone (company_id, project_id, name, is_payment_milestone, bill_amount, status)
+         VALUES ($1, $2, 'Advance on PO', true, 2500, 'PENDING') RETURNING milestone_id`,
+        [companyId, pid])).rows[0].milestone_id);
+
+    const res = await request(app).post(`/api/invoices/from-project/${pid}`).set(hdr(financeUser)).send({});
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe('DRAFT');
+    expect(res.body.projectId).toBe(pid);
+    expect(res.body.milestoneId).toBe(milestoneId); // stamped from the milestone
+    expect(res.body.lines).toHaveLength(1);
+    expect(res.body.lines[0].description).toBe('Advance on PO');
+    expect(Number(res.body.lines[0].unitRate)).toBe(2500);
+    expect(Number(res.body.totalAmount)).toBe(2500); // 1 x 2500, no tax
+  });
+
+  it('404s when the project does not exist', async () => {
+    const res = await request(app).post('/api/invoices/from-project/99999999').set(hdr(financeUser)).send({});
+    expect(res.status).toBe(404);
+  });
+
+  it('denies from-project without INVOICE.CREATE (sales -> 403, view-only)', async () => {
+    const res = await request(app).post(`/api/invoices/from-project/${projectId}`).set(hdr(salesUser)).send({});
+    expect(res.status).toBe(403);
+  });
 });

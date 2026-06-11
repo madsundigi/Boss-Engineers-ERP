@@ -59,6 +59,16 @@ export const receiveGrnSchema = z.object({
 });
 export type ReceiveGrnDto = z.infer<typeof receiveGrnSchema>;
 
+/**
+ * One-click "receive everything outstanding" on a PO: the lines are derived
+ * server-side from the PO's remaining quantity, so the only (optional) input is
+ * the receive warehouse. An empty body is valid (defaults the warehouse).
+ */
+export const receiveAllSchema = z.object({
+  warehouseId: optId(),
+});
+export type ReceiveAllDto = z.infer<typeof receiveAllSchema>;
+
 // ---- shared (optimistic concurrency / list) --------------------------------
 
 export const versionSchema = z.object({ rowVersion: z.coerce.number().int().positive() });

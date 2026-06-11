@@ -102,6 +102,44 @@ export class BillingService {
     return this.repo.create(ctx, header, computed.lines);
   }
 
+  /**
+   * One-click "Raise Invoice from a project": build a CreateInvoiceDto from
+   * everything we can infer about the project and hand it to the SAME create()
+   * path (gapless invoice number, server-side financial computation, DRAFT). The
+   * finance user gets a ready-to-review DRAFT instead of re-typing the customer /
+   * currency / amount.
+   *
+   * Pre-fill:
+   *   - customerId  <- the project's customer.
+   *   - currencyId  <- that customer's default_currency_id.
+   *   - projectId   <- the supplied project.
+   *   - line(s)     <- the next PENDING billing milestone (name + amount), when one
+   *                    exists (and its milestoneId when it is a proj.milestone); else
+   *                    a single placeholder line "Project <project_no>" priced at the
+   *                    project's contract_value (0 when unknown).
+   *
+   * 404 when the project is not in the caller's company. Reuses create()'s buId
+   * guard (a branch is required to allocate the invoice number).
+   */
+  async fromProject(ctx: RequestContext, projectId: number): Promise<Invoice> {
+    const basis = await this.repo.findProjectForInvoice(ctx, projectId);
+    if (!basis) throw Errors.notFound(`Project ${projectId} not found`);
+
+    const milestone = await this.repo.findNextPendingMilestone(ctx, projectId);
+    const line = milestone
+      ? { description: milestone.name, qty: 1, unitRate: milestone.amount }
+      : { description: `Project ${basis.projectNo}`, qty: 1, unitRate: basis.contractValue };
+
+    const dto: CreateInvoiceDto = {
+      customerId: basis.customerId,
+      projectId,
+      milestoneId: milestone?.milestoneId,
+      currencyId: basis.defaultCurrencyId,
+      lines: [line],
+    };
+    return this.create(ctx, dto);
+  }
+
   async getById(ctx: RequestContext, id: number): Promise<Invoice> {
     const row = await this.repo.findById(ctx, id);
     if (!row) throw Errors.notFound(`Invoice ${id} not found`);

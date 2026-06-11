@@ -8,7 +8,7 @@ import { ProcurementService } from './procurement.service';
 import { ProcurementController } from './procurement.controller';
 import { PR_PERMS, PO_PERMS, GRN_PERMS } from './procurement.constants';
 import {
-  createPrSchema, createPoSchema, receiveGrnSchema, versionSchema,
+  createPrSchema, createPoSchema, receiveGrnSchema, receiveAllSchema, versionSchema,
   prListQuerySchema, poListQuerySchema, grnListQuerySchema,
 } from './procurement.dto';
 
@@ -38,6 +38,10 @@ export function procurementRouter(pool: Pool): Router {
     requirePermission(PO_PERMS.VIEW), asyncHandler(c.getPo));
   r.post('/purchase-orders/:id/approve',
     requirePermission(PO_PERMS.APPROVE), validate(versionSchema), asyncHandler(c.approvePo));
+  // One-click receive: GRN for ALL outstanding qty on the PO. Gated on GRN.CREATE
+  // (it creates a goods receipt); optional { warehouseId } body.
+  r.post('/purchase-orders/:poId/receive',
+    requirePermission(GRN_PERMS.CREATE), validate(receiveAllSchema), asyncHandler(c.receiveAllFromPo));
 
   // ---- Goods Receipt Notes: receive against a PO ----------------------
   r.get('/grn',

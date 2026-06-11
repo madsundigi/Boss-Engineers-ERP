@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
-import { ResourceDef, formFor, docFormFor, idOf, DocFormDef, FormField } from '../app/registry';
+import { ResourceDef, RowActionDef, formFor, docFormFor, idOf, DocFormDef, FormField } from '../app/registry';
 import { ResourceForm } from './ResourceForm';
 
 type Row = Record<string, unknown>;
@@ -87,6 +88,7 @@ export function ResourceList({ def }: { def: ResourceDef }) {
   const [busyId, setBusyId] = useState<unknown>(null);
   const form = formFor(def.path);
   const doc = docFormFor(def.path);
+  const navigate = useNavigate();
 
   // Open the edit modal for a row. List endpoints return header-only rows, so
   // for line-item documents we fetch the full record (header + lines) first.
@@ -144,6 +146,41 @@ export function ResourceList({ def }: { def: ResourceDef }) {
     }
   }
 
+  // One-click "carry forward": create the next document from this row, then
+  // jump to that document's list so the user sees the result immediately.
+  async function runAction(row: Row, action: RowActionDef) {
+    const id = idOf(row, def);
+    if (id == null) { setActionError('Could not determine the record id for this action.'); return; }
+    const sid = encodeURIComponent(String(id));
+    setActionError(null);
+    setBusyId(id);
+    try {
+      if (action.kind === 'enquiryToQuote') {
+        // Convert requires a QUALIFIED enquiry — auto-qualify a NEW one first.
+        if (String(row.status ?? '').toUpperCase() === 'NEW') {
+          await api.post(`/api/enquiries/${sid}/approve`, { rowVersion: row.rowVersion });
+        }
+        await api.post(`/api/quotations/from-enquiry/${sid}`, {});
+        navigate('/r/quotations');
+      } else if (action.kind === 'receivePo') {
+        await api.post(`/api/procurement/purchase-orders/${sid}/receive`, {});
+        navigate('/r/grn');
+      } else if (action.kind === 'invoiceFromProject') {
+        await api.post(`/api/invoices/from-project/${sid}`, {});
+        navigate('/r/invoices');
+      }
+    } catch (err) {
+      const a = err as ApiError;
+      setActionError(
+        a.status === 409 ? (a.message || 'This record is not in a state that allows this action.')
+        : a.status === 403 ? 'You do not have permission to perform this action.'
+        : `${a.message}${a.status ? ` (HTTP ${a.status})` : ''}`,
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function submitCreate(payload: Record<string, unknown>) {
     await api.post(def.endpoint, payload);
   }
@@ -155,7 +192,9 @@ export function ResourceList({ def }: { def: ResourceDef }) {
     };
   }
 
-  const showActions = !!form; // resources with a create form also get edit/delete
+  const rowActions = def.rowActions ?? [];
+  // resources with a create form get edit/delete; carry-forward buttons add their own column too
+  const showActions = !!form || rowActions.length > 0;
 
   return (
     <div className="erp-page erp-stack">
@@ -219,7 +258,7 @@ export function ResourceList({ def }: { def: ResourceDef }) {
                 {columns.map((c) => (
                   <th key={c.key} className={c.kind === 'num' ? 'cell-num' : undefined}>{c.label}</th>
                 ))}
-                {showActions && <th style={{ width: 140 }}>Actions</th>}
+                {showActions && <th style={{ width: rowActions.length ? 240 : 140 }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -241,13 +280,22 @@ export function ResourceList({ def }: { def: ResourceDef }) {
                     })}
                     {showActions && (
                       <td>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <button type="button" className="erp-btn erp-btn--sm"
-                            disabled={rowBusy}
-                            onClick={() => openEdit(row)}>Edit</button>
-                          <button type="button" className="erp-btn erp-btn--sm erp-btn--danger"
-                            disabled={rowBusy}
-                            onClick={() => handleDelete(row)}>{rowBusy ? '…' : 'Delete'}</button>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {rowActions.map((a) => (
+                            <button key={a.kind} type="button" className="erp-btn erp-btn--sm erp-btn--primary"
+                              disabled={rowBusy}
+                              onClick={() => runAction(row, a)}>{rowBusy ? '…' : a.label}</button>
+                          ))}
+                          {form && (
+                            <>
+                              <button type="button" className="erp-btn erp-btn--sm"
+                                disabled={rowBusy}
+                                onClick={() => openEdit(row)}>Edit</button>
+                              <button type="button" className="erp-btn erp-btn--sm erp-btn--danger"
+                                disabled={rowBusy}
+                                onClick={() => handleDelete(row)}>{rowBusy ? '…' : 'Delete'}</button>
+                            </>
+                          )}
                         </div>
                       </td>
                     )}

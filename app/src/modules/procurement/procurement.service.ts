@@ -4,11 +4,27 @@ import {
   ProcurementRepository, PrHeaderInput, PrLineInput, PoHeaderInput, PoLineInput, GrnLineInput,
 } from './procurement.repository';
 import { PurchaseRequisition, PurchaseOrder, GoodsReceipt } from './procurement.types';
-import { CreatePrDto, CreatePoDto, ReceiveGrnDto, PrListQueryDto, PoListQueryDto, GrnListQueryDto } from './procurement.dto';
+import { CreatePrDto, CreatePoDto, ReceiveGrnDto, ReceiveAllDto, PrListQueryDto, PoListQueryDto, GrnListQueryDto } from './procurement.dto';
+import { GrnLineDto } from './procurement.dto';
 import { PO_APPROVED_EVENT, PO_AGGREGATE } from './procurement.constants';
 
 /** PO approval committed cost surfaced to the caller for the commitment ledger. */
 export interface PoApprovalResult { purchaseOrder: PurchaseOrder; committedCost: number; }
+
+/**
+ * Derive the GRN lines that receive everything still outstanding on a PO.
+ * Outstanding for a line is the running shortfall `qty − received_qty` (the
+ * po_line.received_qty column is kept current by receiveGrn). Fully-received
+ * lines (outstanding <= 0) are dropped; the receivedQty carried forward is the
+ * exact remaining balance so the resulting GRN closes the line.
+ * Pure (no I/O) so the outstanding maths can be unit-tested directly.
+ */
+export function computeOutstandingLines(po: PurchaseOrder): GrnLineDto[] {
+  return po.lines
+    .map((l) => ({ poLineId: l.poLineId, itemId: l.itemId, outstanding: l.qty - l.receivedQty }))
+    .filter((l) => l.outstanding > 0)
+    .map((l) => ({ poLineId: l.poLineId, itemId: l.itemId, receivedQty: l.outstanding }));
+}
 
 export class ProcurementService {
   constructor(private readonly repo: ProcurementRepository) {}
@@ -124,5 +140,24 @@ export class ProcurementService {
       acceptedQty: l.acceptedQty, rejectedQty: l.rejectedQty,
     }));
     return this.repo.receiveGrn(ctx, po.poId, po.vendorId, warehouseId, lines);
+  }
+
+  /**
+   * One-click receive: create a single GRN for EVERY outstanding PO line (the
+   * remaining `qty − received_qty`), skipping fully-received lines. Reuses the
+   * manual GRN path (receiveGrn) verbatim, so the gapless GRN number, the
+   * stock_transaction ledger, the item_stock balance upsert and the PO-status
+   * guard (APPROVED/PARTIAL) all behave exactly as a hand-keyed receipt — only
+   * the lines are built automatically here. 409 when nothing is left to receive.
+   */
+  async receiveAllFromPo(ctx: RequestContext, poId: number, dto: ReceiveAllDto): Promise<GoodsReceipt> {
+    if (!ctx.buId) throw Errors.badRequest('A branch (x-bu-id) is required to allocate a GRN number');
+    const po = await this.getPo(ctx, poId); // 404 if the PO is absent
+    const lines = computeOutstandingLines(po);
+    if (lines.length === 0) {
+      throw Errors.conflict(`Nothing left to receive on purchase order ${poId} — every line is fully received`);
+    }
+    // Delegate to the manual receive path so all posting/numbering/guards are shared.
+    return this.receiveGrn(ctx, { poId, warehouseId: dto.warehouseId, lines });
   }
 }

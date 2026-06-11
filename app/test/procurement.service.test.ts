@@ -1,5 +1,5 @@
 import { Pool, QueryResult, QueryResultRow } from 'pg';
-import { ProcurementService } from '../src/modules/procurement/procurement.service';
+import { ProcurementService, computeOutstandingLines } from '../src/modules/procurement/procurement.service';
 import { ProcurementRepository, GrnLineInput } from '../src/modules/procurement/procurement.repository';
 import { RequestContext } from '../src/common/request-context';
 import { PurchaseRequisition, PurchaseOrder, GoodsReceipt } from '../src/modules/procurement/procurement.types';
@@ -185,6 +185,89 @@ describe('ProcurementService', () => {
       expect(out).toBe(sampleGrn);
       // vendorId (4) + warehouse (3) are passed through from the PO / default lookup
       expect(repo.receiveGrn).toHaveBeenCalledWith(expect.anything(), 8, 4, 3, expect.any(Array));
+    });
+  });
+
+  // ---- One-click receive-all ----
+  describe('computeOutstandingLines (outstanding = qty − received_qty)', () => {
+    it('carries forward the remaining balance per line', () => {
+      const po: PurchaseOrder = {
+        ...samplePo,
+        lines: [
+          { poLineId: 1, itemId: 7, qty: 10, receivedQty: 4, unitRate: 500, lineAmount: 5000, needByDate: null },
+          { poLineId: 2, itemId: 8, qty: 6, receivedQty: 0, unitRate: 100, lineAmount: 600, needByDate: null },
+        ],
+      };
+      expect(computeOutstandingLines(po)).toEqual([
+        { poLineId: 1, itemId: 7, receivedQty: 6 }, // 10 − 4
+        { poLineId: 2, itemId: 8, receivedQty: 6 }, // 6 − 0
+      ]);
+    });
+
+    it('drops fully-received (and over-received) lines', () => {
+      const po: PurchaseOrder = {
+        ...samplePo,
+        lines: [
+          { poLineId: 1, itemId: 7, qty: 10, receivedQty: 10, unitRate: 500, lineAmount: 5000, needByDate: null },
+          { poLineId: 2, itemId: 8, qty: 6, receivedQty: 9, unitRate: 100, lineAmount: 600, needByDate: null },
+          { poLineId: 3, itemId: 9, qty: 5, receivedQty: 2, unitRate: 100, lineAmount: 500, needByDate: null },
+        ],
+      };
+      expect(computeOutstandingLines(po)).toEqual([{ poLineId: 3, itemId: 9, receivedQty: 3 }]);
+    });
+  });
+
+  describe('receiveAllFromPo', () => {
+    it('409 unless the PO is APPROVED/PARTIAL (guard shared with manual receive)', async () => {
+      repo.findPo.mockResolvedValue({ ...samplePo, status: 'APPROVED' }); // getPo, then receiveGrn's getPo
+      repo.defaultWarehouseForBu.mockResolvedValue(3);
+      repo.receiveGrn.mockResolvedValue(sampleGrn);
+      // DRAFT PO -> receiveGrn's own guard rejects with 409.
+      repo.findPo.mockResolvedValue({ ...samplePo, status: 'DRAFT' });
+      await expect(status(service.receiveAllFromPo(baseCtx(), 8, {}))).resolves.toBe(409);
+      expect(repo.receiveGrn).not.toHaveBeenCalled();
+    });
+
+    it('409 when nothing is outstanding (every line fully received)', async () => {
+      repo.findPo.mockResolvedValue({
+        ...samplePo, status: 'APPROVED',
+        lines: [{ poLineId: 1, itemId: 7, qty: 10, receivedQty: 10, unitRate: 500, lineAmount: 5000, needByDate: null }],
+      });
+      await expect(status(service.receiveAllFromPo(baseCtx(), 8, {}))).resolves.toBe(409);
+      expect(repo.receiveGrn).not.toHaveBeenCalled();
+    });
+
+    it('builds one GRN for the full outstanding qty and delegates to receiveGrn', async () => {
+      repo.findPo.mockResolvedValue({
+        ...samplePo, status: 'APPROVED',
+        lines: [
+          { poLineId: 1, itemId: 7, qty: 10, receivedQty: 4, unitRate: 500, lineAmount: 5000, needByDate: null },
+          { poLineId: 2, itemId: 8, qty: 6, receivedQty: 6, unitRate: 100, lineAmount: 600, needByDate: null },
+        ],
+      });
+      repo.defaultWarehouseForBu.mockResolvedValue(3);
+      repo.receiveGrn.mockResolvedValue(sampleGrn);
+      const out = await service.receiveAllFromPo(baseCtx(), 8, {});
+      expect(out).toBe(sampleGrn);
+      // Only the outstanding line (1: 10−4=6) is received; the fully-received line (2) is skipped.
+      const passedLines = repo.receiveGrn.mock.calls[0][4] as { poLineId: number; receivedQty: number }[];
+      expect(passedLines).toEqual([{ poLineId: 1, itemId: 7, receivedQty: 6 }]);
+      // vendorId (4) + warehouse (3) flow through the shared receive path.
+      expect(repo.receiveGrn).toHaveBeenCalledWith(expect.anything(), 8, 4, 3, expect.any(Array));
+    });
+
+    it('passes an explicit warehouseId straight through to the receive path', async () => {
+      repo.findPo.mockResolvedValue({ ...samplePo, status: 'APPROVED' }); // line: qty 10, received 0
+      repo.receiveGrn.mockResolvedValue(sampleGrn);
+      await service.receiveAllFromPo(baseCtx(), 8, { warehouseId: 99 });
+      // warehouse 99 is honoured (no default lookup needed).
+      expect(repo.receiveGrn).toHaveBeenCalledWith(expect.anything(), 8, 4, 99, expect.any(Array));
+      expect(repo.defaultWarehouseForBu).not.toHaveBeenCalled();
+    });
+
+    it('400 without a branch (x-bu-id) — required for GRN numbering', async () => {
+      await expect(status(service.receiveAllFromPo(baseCtx({ buId: null }), 8, {}))).resolves.toBe(400);
+      expect(repo.findPo).not.toHaveBeenCalled();
     });
   });
 });
