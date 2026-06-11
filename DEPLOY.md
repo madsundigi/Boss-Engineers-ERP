@@ -22,7 +22,8 @@ export ERP_APP_PW='change-this-strong-password'
 psql "$ADMIN_DATABASE_URL" -v erp_app_pw="$ERP_APP_PW" -f db/10_prod_login_role.sql
 
 # d) Set a real password for the seeded admin user (>=12 chars, mixed).
-cd app && DATABASE_URL="$ADMIN_DATABASE_URL" npm run set-password admin_user 'Admin#Str0ngPass!' && cd ..
+#    The seeded login is 'admin' (company id 1).
+cd app && DATABASE_URL="$ADMIN_DATABASE_URL" npm run set-password admin 'Admin#Str0ngPass!' && cd ..
 ```
 
 The app's runtime `DATABASE_URL` must then use the login role, **not** the owner:
@@ -92,7 +93,7 @@ The container runs migrations (idempotent) then starts the API on `:3001`.
 ```bash
 TOKEN=$(curl -s localhost:3001/auth/login \
   -H 'content-type: application/json' \
-  -d '{"username":"admin_user","password":"Admin#Str0ngPass!","companyId":1}' | jq -r .token)
+  -d '{"username":"admin","password":"Admin#Str0ngPass!","companyId":1}' | jq -r .token)
 curl -s localhost:3001/api/me -H "Authorization: Bearer $TOKEN"
 ```
 
