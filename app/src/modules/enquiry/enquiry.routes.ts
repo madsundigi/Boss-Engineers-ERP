@@ -8,7 +8,7 @@ import { EnquiryService } from './enquiry.service';
 import { EnquiryController } from './enquiry.controller';
 import { ENQUIRY_PERMS } from './enquiry.constants';
 import {
-  createEnquirySchema, updateEnquirySchema, changeStatusSchema, approveSchema, listQuerySchema,
+  createEnquirySchema, updateEnquirySchema, changeStatusSchema, approveSchema, assignSchema, listQuerySchema,
 } from './enquiry.dto';
 
 /** Compose the enquiry module (repository -> service -> controller) and routes. */
@@ -50,6 +50,11 @@ export function enquiryRouter(pool: Pool): Router {
     requirePermission(ENQUIRY_PERMS.APPROVE),
     validate(approveSchema),
     asyncHandler(controller.approve));
+
+  r.post('/:id/assign',
+    requirePermission(ENQUIRY_PERMS.EDIT),
+    validate(assignSchema),
+    asyncHandler(controller.assign));
 
   r.delete('/:id',
     requirePermission(ENQUIRY_PERMS.DELETE),

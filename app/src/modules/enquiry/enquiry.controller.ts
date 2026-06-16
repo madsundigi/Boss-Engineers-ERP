@@ -3,7 +3,7 @@ import { EnquiryService } from './enquiry.service';
 import { valid } from '../../common/validate';
 import { Errors } from '../../common/http-error';
 import { RequestContext } from '../../common/request-context';
-import { CreateEnquiryDto, UpdateEnquiryDto, ChangeStatusDto, ListQueryDto } from './enquiry.dto';
+import { CreateEnquiryDto, UpdateEnquiryDto, ChangeStatusDto, ListQueryDto, AssignDto } from './enquiry.dto';
 
 function ctxOf(req: Request): RequestContext {
   if (!req.context) throw Errors.unauthorized();
@@ -43,6 +43,11 @@ export class EnquiryController {
   approve = async (req: Request, res: Response) => {
     const { rowVersion } = valid<{ rowVersion: number }>(req);
     res.json(await this.service.approve(ctxOf(req), idOf(req), rowVersion));
+  };
+
+  assign = async (req: Request, res: Response) => {
+    const { userId, rowVersion } = valid<AssignDto>(req);
+    res.json(await this.service.assign(ctxOf(req), idOf(req), userId, rowVersion));
   };
 
   remove = async (req: Request, res: Response) => {

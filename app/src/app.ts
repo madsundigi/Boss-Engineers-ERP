@@ -5,6 +5,7 @@ import { securityMiddlewares } from './common/security';
 import { httpLogger } from './common/logger';
 import { errorMiddleware } from './common/error-middleware';
 import { enquiryRouter } from './modules/enquiry/enquiry.routes';
+import { followupRouter } from './modules/followup/followup.routes';
 import { quotationRouter } from './modules/quotation/quotation.routes';
 import { quotationSentHandler } from './modules/quotation/quotation.handlers';
 import { projectRouter } from './modules/project/project.routes';
@@ -97,6 +98,7 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
   app.use('/api/auth', mfaRouter(pool)); // authenticated MFA enrollment
 
   app.use('/api/enquiries', enquiryRouter(pool));
+  app.use('/api/followups', followupRouter(pool));
   app.use('/api/quotations', quotationRouter(pool));
   app.use('/api/projects', projectRouter(pool));
   app.use('/api/inventory', inventoryRouter(pool));

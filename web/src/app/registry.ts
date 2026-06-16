@@ -14,10 +14,11 @@ export interface ResourceDef {
   rowActions?: RowActionDef[];
 }
 
-/** A one-click action on a row that creates the next document from this one. */
+/** A one-click action on a row. API kinds create the next document; modal kinds
+ *  ('assignPerson' / 'followups') open an in-place modal instead of a call. */
 export interface RowActionDef {
   label: string;
-  kind: 'enquiryToQuote' | 'receivePo' | 'invoiceFromProject';
+  kind: 'enquiryToQuote' | 'receivePo' | 'invoiceFromProject' | 'assignPerson' | 'followups';
 }
 
 export interface NavSection {
@@ -30,7 +31,19 @@ export const SECTIONS: NavSection[] = [
     label: 'Sales & CRM',
     items: [
       { path: 'enquiries', label: 'Enquiries', endpoint: '/api/enquiries', idKey: 'enquiryId',
-        rowActions: [{ label: '→ Quote', kind: 'enquiryToQuote' }] },
+        columns: [
+          { key: 'enquiryNo', label: 'Enquiry No', kind: 'mono' },
+          { key: 'customerName', label: 'Customer Name' },
+          { key: 'machineType', label: 'Machine Type' },
+          { key: 'assignedToName', label: 'Assigned To' },
+          { key: 'status', label: 'Status', kind: 'status' },
+          { key: 'followUpDate', label: 'Follow-Up Date', kind: 'date' },
+        ],
+        rowActions: [
+          { label: '→ Quote', kind: 'enquiryToQuote' },
+          { label: 'Assign', kind: 'assignPerson' },
+          { label: 'Follow-ups', kind: 'followups' },
+        ] },
       { path: 'opportunities', label: 'Opportunities', endpoint: '/api/crm/opportunities', idKey: 'oppId' },
       { path: 'quotations', label: 'Quotations', endpoint: '/api/quotations', idKey: 'quotationId' },
       { path: 'contracts', label: 'Contracts', endpoint: '/api/contracts' },

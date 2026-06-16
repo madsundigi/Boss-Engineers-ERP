@@ -154,8 +154,11 @@ d('Workload API (integration)', () => {
   });
 
   it('returns a capacity-vs-load window (200)', async () => {
+    // Scope to THIS suite's employee: the capacity view is global (all employees),
+    // and other suites can seed allocations on the same calendar day, so an
+    // unfiltered find() could pick a different employee's under-allocated row.
     const res = await request(app)
-      .get('/api/workload/allocations/capacity?from=2026-06-09&to=2026-06-12')
+      .get(`/api/workload/allocations/capacity?from=2026-06-09&to=2026-06-12&employeeId=${employeeId}`)
       .set(hdr(hrUser));
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.rows)).toBe(true);

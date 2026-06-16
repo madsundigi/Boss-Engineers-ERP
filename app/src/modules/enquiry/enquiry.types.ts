@@ -21,6 +21,8 @@ export interface Enquiry {
   salesExecutive: string | null;
   followUpDate: string | null;
   remarks: string | null;
+  assignedTo: number | null;
+  assignedToName: string | null;
   status: EnquiryStatus;
   createdAt: string;
   createdBy: number | null;

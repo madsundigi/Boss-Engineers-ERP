@@ -8,7 +8,9 @@ import { DOC_TYPE, EnquiryStatus } from './enquiry.constants';
 const COLS = `enquiry_id, enquiry_no, company_id, bu_id, customer_name,
   contact_person AS contact, email, address, industry, source, requirement,
   mobile, machine_type, application, quantity, budget, sales_executive,
-  follow_up_date, remarks,
+  follow_up_date, remarks, assigned_to,
+  (SELECT COALESCE(au_asg.full_name, au_asg.username)
+     FROM sec.app_user au_asg WHERE au_asg.user_id = assigned_to) AS assigned_to_name,
   status, created_at, created_by, updated_at, row_version`;
 
 function mapRow(r: QueryResultRow): Enquiry {
@@ -32,6 +34,8 @@ function mapRow(r: QueryResultRow): Enquiry {
     salesExecutive: r.sales_executive,
     followUpDate: r.follow_up_date,
     remarks: r.remarks,
+    assignedTo: r.assigned_to == null ? null : Number(r.assigned_to),
+    assignedToName: r.assigned_to_name ?? null,
     status: r.status,
     createdAt: r.created_at,
     createdBy: r.created_by == null ? null : Number(r.created_by),
@@ -183,6 +187,45 @@ export class EnquiryRepository {
             AND row_version = $6 AND NOT is_deleted
         RETURNING ${COLS}`,
         [status, reasonId, ctx.userId, id, ctx.companyId, expectedVersion],
+      );
+      return res.rowCount ? mapRow(res.rows[0]) : null;
+    });
+  }
+
+  /** True if the given user_id is an existing, active, non-deleted app user. */
+  async userIsActive(ctx: RequestContext, userId: number): Promise<boolean> {
+    return runRead(this.pool, ctx, async (c) => {
+      const res = await c.query(
+        `SELECT 1 FROM sec.app_user WHERE user_id = $1 AND is_active AND NOT is_deleted`,
+        [userId],
+      );
+      return (res.rowCount ?? 0) > 0;
+    });
+  }
+
+  /**
+   * Assign (or re-assign) the enquiry to a salesperson under optimistic lock.
+   * When `expectedVersion` is undefined the version check is skipped (assign is
+   * idempotent-friendly). Returns null when no row matched (not found / version
+   * mismatch — the service distinguishes the two via a prior findById).
+   */
+  async assign(
+    ctx: RequestContext, id: number, userId: number, expectedVersion?: number,
+  ): Promise<Enquiry | null> {
+    return runInContext(this.pool, ctx, async (client) => {
+      const params: unknown[] = [userId, ctx.userId, id, ctx.companyId];
+      let verSql = '';
+      if (expectedVersion !== undefined) {
+        params.push(expectedVersion);
+        verSql = ` AND row_version = $${params.length}`;
+      }
+      const res = await client.query(
+        `UPDATE sales.enquiry
+            SET assigned_to = $1, updated_by = $2, updated_at = now(),
+                row_version = row_version + 1
+          WHERE enquiry_id = $3 AND company_id = $4${verSql} AND NOT is_deleted
+        RETURNING ${COLS}`,
+        params,
       );
       return res.rowCount ? mapRow(res.rows[0]) : null;
     });

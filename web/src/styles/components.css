@@ -114,6 +114,17 @@ a:hover{ text-decoration:underline; }
 .erp-badge--rejected{ color:var(--c-status-rejected); background:var(--c-status-rejected-bg); }
 .erp-badge--closed  { color:var(--c-status-closed);   background:var(--c-status-closed-bg); }
 
+/* Follow-up urgency signals (blinking for due/missed). Used by the follow-up
+   panel rows and the dashboard "Follow-ups due" widget. */
+@keyframes erp-blink { 0%,100%{opacity:1} 50%{opacity:.35} }
+.erp-signal { display:inline-block; padding:2px 8px; border-radius:10px; font-size:12px; font-weight:600; }
+.erp-signal--upcoming { background:#f59e0b; color:#111; }                 /* orange: coming up */
+.erp-signal--due      { background:#e5484d; color:#fff; animation:erp-blink 1s ease-in-out infinite; }   /* red blinking: due today */
+.erp-signal--missed   { background:#7a1020; color:#fff; animation:erp-blink 1.4s ease-in-out infinite; } /* dark red blinking: missed */
+.erp-signal--normal   { background:#e5e7eb; color:#374151; }
+.erp-signal--done     { background:#16a34a; color:#fff; }
+.erp-signal--cancelled{ background:#9ca3af; color:#fff; }
+
 /* =====================================================================
    6. TABLES (data grid: toolbar, selection, sort, pagination)
    ===================================================================== */

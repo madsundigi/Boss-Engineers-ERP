@@ -14,6 +14,7 @@ const sample: Enquiry = {
   customerName: 'Acme', contact: null, email: null, address: null, industry: null,
   source: null, requirement: null, mobile: null, machineType: null, application: null,
   quantity: null, budget: null, salesExecutive: null, followUpDate: null, remarks: null,
+  assignedTo: null, assignedToName: null,
   status: 'NEW', createdAt: 't', createdBy: 1, updatedAt: 't', rowVersion: 1,
 };
 
@@ -24,6 +25,8 @@ function makeRepo() {
     list: jest.fn(),
     update: jest.fn(),
     changeStatus: jest.fn(),
+    userIsActive: jest.fn(),
+    assign: jest.fn(),
     softDelete: jest.fn(),
   } as unknown as jest.Mocked<EnquiryRepository>;
 }

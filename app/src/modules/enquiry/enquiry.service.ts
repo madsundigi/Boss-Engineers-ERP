@@ -75,6 +75,27 @@ export class EnquiryService {
     return updated;
   }
 
+  /**
+   * Assign (or re-assign) the lead to a salesperson (ENQUIRY.EDIT). Validates the
+   * target user is active first (400 if not), then optimistic-locks the update when
+   * a rowVersion is supplied (409 on mismatch). 404 if the enquiry is missing.
+   */
+  async assign(ctx: RequestContext, id: number, userId: number, rowVersion?: number): Promise<Enquiry> {
+    const existing = await this.getById(ctx, id); // 404 if missing
+    const active = await this.repo.userIsActive(ctx, userId);
+    if (!active) {
+      throw Errors.badRequest(`User ${userId} is not an active user`);
+    }
+    const updated = await this.repo.assign(ctx, id, userId, rowVersion);
+    if (!updated) {
+      throw Errors.conflict('Enquiry was modified by someone else (row version mismatch)', {
+        expected: rowVersion,
+        current: existing.rowVersion,
+      });
+    }
+    return updated;
+  }
+
   async delete(ctx: RequestContext, id: number): Promise<void> {
     const existing = await this.getById(ctx, id);
     if (existing.status !== 'NEW') {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
+import { FollowupSignals } from '../components/FollowupSignals';
 
 type Kpis = Record<string, unknown>;
 
@@ -63,6 +64,8 @@ export function DashboardPage() {
           ))}
         </div>
       )}
+
+      <FollowupSignals />
 
       {kpis && 'salesPipeline' in kpis && (
         <div className="erp-panel" style={{ marginTop: 16 }}>

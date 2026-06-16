@@ -45,6 +45,14 @@ export const approveSchema = z.object({
 });
 export type ApproveDto = z.infer<typeof approveSchema>;
 
+/** POST /enquiries/:id/assign — assign the lead to a salesperson. rowVersion is
+ *  optional (optimistic-lock the assignment only when the client supplies it). */
+export const assignSchema = z.object({
+  userId: z.coerce.number().int().positive(),
+  rowVersion: z.coerce.number().int().positive().optional(),
+});
+export type AssignDto = z.infer<typeof assignSchema>;
+
 /** GET /enquiries — list filters + pagination (all from query string). */
 export const listQuerySchema = z.object({
   status: z.enum(ENQUIRY_STATUS).optional(),

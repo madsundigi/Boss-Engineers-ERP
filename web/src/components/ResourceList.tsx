@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { ResourceDef, RowActionDef, formFor, docFormFor, idOf, DocFormDef, FormField } from '../app/registry';
 import { ResourceForm } from './ResourceForm';
+import { RowActionModals, ModalAction } from './RowActionModals';
 
 type Row = Record<string, unknown>;
 
@@ -86,6 +87,7 @@ export function ResourceList({ def }: { def: ResourceDef }) {
   const [showForm, setShowForm] = useState(false);
   const [editRow, setEditRow] = useState<Row | null>(null);
   const [busyId, setBusyId] = useState<unknown>(null);
+  const [modalAction, setModalAction] = useState<ModalAction | null>(null);
   const form = formFor(def.path);
   const doc = docFormFor(def.path);
   const navigate = useNavigate();
@@ -144,6 +146,19 @@ export function ResourceList({ def }: { def: ResourceDef }) {
     } finally {
       setBusyId(null);
     }
+  }
+
+  // Modal row-actions ('assignPerson' / 'followups') open an in-place modal
+  // instead of hitting an API path; API kinds fall through to runAction.
+  function clickAction(row: Row, action: RowActionDef) {
+    if (action.kind === 'assignPerson' || action.kind === 'followups') {
+      const id = idOf(row, def);
+      if (id == null) { setActionError('Could not determine the enquiry id for this action.'); return; }
+      setActionError(null);
+      setModalAction({ kind: action.kind, id, row });
+      return;
+    }
+    void runAction(row, action);
   }
 
   // One-click "carry forward": create the next document from this row, then
@@ -233,6 +248,12 @@ export function ResourceList({ def }: { def: ResourceDef }) {
         />
       )}
 
+      <RowActionModals
+        action={modalAction}
+        onClose={() => setModalAction(null)}
+        onSaved={() => { setModalAction(null); refresh(); }}
+      />
+
       {error && (
         <div className={`erp-alert ${error.status === 403 ? 'erp-alert--warning' : 'erp-alert--error'}`} role="alert">
           {error.status === 403
@@ -284,7 +305,7 @@ export function ResourceList({ def }: { def: ResourceDef }) {
                           {rowActions.map((a) => (
                             <button key={a.kind} type="button" className="erp-btn erp-btn--sm erp-btn--primary"
                               disabled={rowBusy}
-                              onClick={() => runAction(row, a)}>{rowBusy ? '…' : a.label}</button>
+                              onClick={() => clickAction(row, a)}>{rowBusy ? '…' : a.label}</button>
                           ))}
                           {form && (
                             <>
