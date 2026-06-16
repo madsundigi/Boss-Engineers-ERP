@@ -1,10 +1,10 @@
 import { RequestContext } from '../../common/request-context';
 import { DashboardRepository } from './dashboard.repository';
-import { KpiSummary, FunnelRow } from './dashboard.types';
+import { KpiSummary, FunnelRow, TrendRow } from './dashboard.types';
 
 /** Repository surface the service depends on (lets the unit test inject a fake). */
 export type DashboardRepoLike = Pick<
-  DashboardRepository, 'fetchKpiParts' | 'fetchSalesFunnel'
+  DashboardRepository, 'fetchKpiParts' | 'fetchSalesFunnel' | 'fetchTrends'
 >;
 
 /**
@@ -47,6 +47,11 @@ export class DashboardService {
   /** Sales funnel stage counts for GET /api/dashboard/sales-funnel. */
   getSalesFunnel(ctx: RequestContext): Promise<FunnelRow[]> {
     return this.repo.fetchSalesFunnel(ctx);
+  }
+
+  /** Last-6-months trend series for GET /api/dashboard/trends. */
+  getTrends(ctx: RequestContext): Promise<TrendRow[]> {
+    return this.repo.fetchTrends(ctx);
   }
 
   /**

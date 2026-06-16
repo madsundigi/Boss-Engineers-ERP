@@ -1,6 +1,7 @@
 import { useState, FormEvent } from 'react';
 import { useSession } from './session';
 import { apiBase, setApiBase, ApiError } from '../api/client';
+import { Icon } from '../components/Icon';
 
 export function LoginPage() {
   const { login } = useSession();
@@ -33,8 +34,11 @@ export function LoginPage() {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={submit}>
-        <h1>Boss Engineers ERP</h1>
-        <p className="sub">Sign in to continue</p>
+        <div className="login-brand">
+          <span className="login-logo"><Icon name="bolt" size={28} /></span>
+          <h1>Boss Engineers ERP</h1>
+          <p className="sub">Sign in to your workspace</p>
+        </div>
 
         {error && <div className="erp-alert erp-alert--error" role="alert">{error}</div>}
 

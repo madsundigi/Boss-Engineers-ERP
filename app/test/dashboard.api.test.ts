@@ -111,6 +111,36 @@ d('Dashboard API (integration) — read-only KPIs, funnel, export RBAC', () => {
     expect(res.status).toBe(401);
   });
 
+  it('GET /trends (200) returns exactly 6 month rows, each numeric (>= 0)', async () => {
+    const res = await request(app).get('/api/dashboard/trends').set(hdr(ceoUser));
+    expect(res.status).toBe(200);
+    const rows = (res.body as { rows: Array<Record<string, unknown>> }).rows;
+    expect(Array.isArray(rows)).toBe(true);
+    expect(rows).toHaveLength(6);
+    for (const row of rows) {
+      expect(String(row.month)).toMatch(/^\d{4}-\d{2}$/);
+      expect(typeof row.label).toBe('string');
+      for (const key of ['enquiries', 'quotations', 'revenue']) {
+        expect(typeof row[key]).toBe('number');
+        expect(row[key] as number).toBeGreaterThanOrEqual(0);
+      }
+    }
+    // months are returned in ascending chronological order, last == current month.
+    const months = rows.map((r) => r.month as string);
+    expect([...months].sort()).toEqual(months);
+  });
+
+  it('GET /trends allows a VIEW-only role (sales) to read', async () => {
+    const res = await request(app).get('/api/dashboard/trends').set(hdr(salesUser));
+    expect(res.status).toBe(200);
+    expect((res.body as { rows: unknown[] }).rows).toHaveLength(6);
+  });
+
+  it('GET /trends requires authentication (401)', async () => {
+    const res = await request(app).get('/api/dashboard/trends');
+    expect(res.status).toBe(401);
+  });
+
   it('GET /kpis/export (200, text/csv) as ceo_user (DASHBOARD.EXPORT)', async () => {
     const res = await request(app).get('/api/dashboard/kpis/export').set(hdr(ceoUser));
     expect(res.status).toBe(200);

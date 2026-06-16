@@ -236,7 +236,10 @@ d('Follow-up API (integration) — assignment + follow-up trail, urgency, RBAC',
       return Number(r.rows[0].followup_id);
     };
     const missedId = await seed('2020-01-01');                 // long past
-    const today = new Date().toISOString().slice(0, 10);       // YYYY-MM-DD
+    // Use the DB's own CURRENT_DATE (what the urgency CASE compares against) rather
+    // than a UTC `new Date()` — otherwise near midnight in a non-UTC timezone the
+    // two disagree by a day and "today" reads as MISSED instead of DUE.
+    const today = (await pool.query<{ d: string }>('SELECT CURRENT_DATE::text AS d')).rows[0].d;
     const dueId = await seed(today);
 
     const res = await request(app).get('/api/followups/dashboard').set(hdr(salesUser));

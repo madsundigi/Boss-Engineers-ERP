@@ -36,3 +36,16 @@ export interface FunnelRow {
   stage: string;                // ENQUIRY | QUOTATION | WON | PROJECT
   count: number;
 }
+
+/**
+ * One calendar month of the dashboard trend series (GET /api/dashboard/trends).
+ * The endpoint always returns the last 6 months (including empty months as 0),
+ * so a brand-new company yields six all-zero rows — never an empty array.
+ */
+export interface TrendRow {
+  month: string;                // 'YYYY-MM' (date_trunc'd month, company timezone)
+  label: string;                // short month name, e.g. 'Jun'
+  enquiries: number;            // count of sales.enquiry by enquiry_date in this month
+  quotations: number;           // count of sales.quotation by quote_date in this month
+  revenue: number;              // Σ fin.invoice.taxable_amount (issued) by invoice_date in this month
+}

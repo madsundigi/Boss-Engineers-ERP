@@ -36,5 +36,10 @@ export function dashboardRouter(pool: Pool): Router {
     validate(dashboardQuerySchema, 'query'),
     asyncHandler(controller.salesFunnel));
 
+  r.get('/trends',
+    requirePermission(P.VIEW),
+    validate(dashboardQuerySchema, 'query'),
+    asyncHandler(controller.trends));
+
   return r;
 }

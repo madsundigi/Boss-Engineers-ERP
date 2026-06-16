@@ -1,7 +1,7 @@
 import { DashboardService, DashboardRepoLike } from '../src/modules/dashboard/dashboard.service';
 import { KpiParts } from '../src/modules/dashboard/dashboard.repository';
 import { RequestContext } from '../src/common/request-context';
-import { FunnelRow } from '../src/modules/dashboard/dashboard.types';
+import { FunnelRow, TrendRow } from '../src/modules/dashboard/dashboard.types';
 
 const ctx: RequestContext = {
   userId: 5, username: 'ceo', companyId: 1, buId: 1,
@@ -49,6 +49,7 @@ function makeRepo(): jest.Mocked<DashboardRepoLike> {
   return {
     fetchKpiParts: jest.fn(),
     fetchSalesFunnel: jest.fn(),
+    fetchTrends: jest.fn(),
   } as unknown as jest.Mocked<DashboardRepoLike>;
 }
 
@@ -128,6 +129,23 @@ describe('DashboardService', () => {
       const out = await service.getSalesFunnel(ctx);
       expect(out).toBe(funnel);
       expect(repo.fetchSalesFunnel).toHaveBeenCalledWith(ctx);
+    });
+  });
+
+  describe('getTrends', () => {
+    it('passes the 6-month trend series straight through from the repo', async () => {
+      const trends: TrendRow[] = [
+        { month: '2026-01', label: 'Jan', enquiries: 3, quotations: 1, revenue: 0 },
+        { month: '2026-02', label: 'Feb', enquiries: 0, quotations: 0, revenue: 0 },
+        { month: '2026-03', label: 'Mar', enquiries: 5, quotations: 4, revenue: 120000 },
+        { month: '2026-04', label: 'Apr', enquiries: 2, quotations: 2, revenue: 0 },
+        { month: '2026-05', label: 'May', enquiries: 1, quotations: 0, revenue: 50000 },
+        { month: '2026-06', label: 'Jun', enquiries: 4, quotations: 3, revenue: 90000 },
+      ];
+      repo.fetchTrends.mockResolvedValue(trends);
+      const out = await service.getTrends(ctx);
+      expect(out).toBe(trends);
+      expect(repo.fetchTrends).toHaveBeenCalledWith(ctx);
     });
   });
 

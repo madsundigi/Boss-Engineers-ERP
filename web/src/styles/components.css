@@ -282,3 +282,117 @@ a:hover{ text-decoration:underline; }
 .erp-stack{ display:flex; flex-direction:column; gap:var(--sp-4); }
 .erp-row{ display:flex; align-items:center; gap:var(--sp-2); }
 .mt-4{ margin-top:var(--sp-4); } .mb-4{ margin-bottom:var(--sp-4); }
+
+/* =====================================================================
+   12. PREMIUM LAYER — modern SaaS polish (overrides + new primitives).
+   Loaded last so it refines the base components above.
+   ===================================================================== */
+body{ font-size:var(--fs-14); -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
+
+/* custom scrollbars */
+*{ scrollbar-width:thin; scrollbar-color:#cbd5e1 transparent; }
+::-webkit-scrollbar{ width:10px; height:10px; }
+::-webkit-scrollbar-thumb{ background:#cbd5e1; border-radius:999px; border:2px solid transparent; background-clip:content-box; }
+::-webkit-scrollbar-thumb:hover{ background:#94a3b8; background-clip:content-box; }
+::-webkit-scrollbar-track{ background:transparent; }
+
+/* page header + entrance */
+.erp-content{ padding:var(--content-pad); }
+@keyframes erp-fade-in{ from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none} }
+.erp-page{ animation:erp-fade-in var(--motion) var(--ease); }
+.erp-page__title{ font-size:var(--fs-24); font-weight:var(--fw-bold); letter-spacing:-.02em; }
+
+/* ---- TOPBAR (white, refined) ---- */
+.erp-topbar{ padding:0 var(--sp-5); gap:var(--sp-4); box-shadow:0 1px 0 rgba(15,23,42,.03); }
+.erp-topbar__brand{ color:var(--c-text); font-size:var(--fs-16); font-weight:var(--fw-bold); letter-spacing:-.01em; }
+.erp-topbar__logo{ width:32px; height:32px; border-radius:var(--r-md); background:var(--c-primary-grad);
+  box-shadow:0 2px 6px rgba(79,70,229,.35); font-size:var(--fs-14); }
+.erp-avatar{ width:32px; height:32px; background:var(--c-primary-grad); font-size:var(--fs-12);
+  box-shadow:0 2px 6px rgba(79,70,229,.3); }
+
+/* ---- SIDEBAR (deep, gradient, rounded items) ---- */
+.erp-sidebar{ background:var(--c-sidebar-grad); border-right:1px solid var(--c-sidebar-border); padding:var(--sp-3); }
+.erp-nav__section{ padding:var(--sp-4) var(--sp-3) var(--sp-1); font-size:10px; letter-spacing:.08em; color:var(--c-sidebar-section); }
+.erp-nav__item{ height:40px; padding:0 var(--sp-3); margin:2px 0; border-left:0; border-radius:var(--r-md);
+  color:var(--c-sidebar-text); font-weight:var(--fw-medium);
+  transition:background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease); }
+.erp-nav__item:hover{ background:var(--c-sidebar-hover); color:#fff; }
+.erp-nav__item.is-active{ background:var(--c-sidebar-active-bg); color:#fff; border-left:0; font-weight:var(--fw-semibold);
+  box-shadow:inset 3px 0 0 0 #818cf8; }
+.erp-nav__icon{ width:20px; opacity:1; font-size:var(--fs-16); }
+
+/* ---- BUTTONS (depth + lift) ---- */
+.erp-btn{ border-radius:var(--r-md); transition:all var(--motion-fast) var(--ease); }
+.erp-btn--primary{ background:var(--c-primary); border-color:var(--c-primary); box-shadow:0 1px 2px rgba(79,70,229,.25); }
+.erp-btn--primary:hover{ background:var(--c-primary-hover); border-color:var(--c-primary-hover);
+  box-shadow:0 6px 16px rgba(79,70,229,.32); transform:translateY(-1px); }
+.erp-btn--primary:active{ transform:translateY(0); box-shadow:0 1px 2px rgba(79,70,229,.25); }
+.erp-btn--danger:hover{ box-shadow:0 6px 16px rgba(220,38,38,.28); transform:translateY(-1px); }
+.erp-btn--sm{ height:32px; border-radius:var(--r-sm); }
+
+/* ---- INPUTS (soft focus ring) ---- */
+.erp-input,.erp-select,.erp-textarea{ border-radius:var(--r-md);
+  transition:border-color var(--motion-fast) var(--ease), box-shadow var(--motion-fast) var(--ease); }
+.erp-input:focus,.erp-select:focus,.erp-textarea:focus{ border-color:var(--c-primary); box-shadow:0 0 0 3px var(--c-focus-ring); }
+
+/* ---- CARDS / PANELS (hover lift, softer) ---- */
+.erp-card,.erp-panel{ border-radius:var(--r-lg); transition:box-shadow var(--motion) var(--ease), transform var(--motion) var(--ease); }
+.erp-panel__head{ padding:var(--sp-4) var(--sp-5); font-size:var(--fs-16); font-weight:var(--fw-semibold); letter-spacing:-.01em; }
+.erp-panel__body{ padding:var(--sp-5); }
+
+/* ---- TABLES (breathing room, indigo hover) ---- */
+.erp-table-wrap{ border-radius:var(--r-lg); }
+.erp-table thead th{ background:var(--c-surface-alt); height:44px; font-size:var(--fs-11); text-transform:uppercase;
+  letter-spacing:.04em; color:var(--c-text-muted); border-bottom:1px solid var(--c-border); font-weight:var(--fw-semibold); }
+.erp-table tbody tr{ transition:background var(--motion-fast) var(--ease); }
+.erp-table tbody tr:hover{ background:var(--c-primary-subtle); }
+.erp-table tbody td{ border-bottom:1px solid var(--c-border); }
+.erp-table-toolbar{ padding:var(--sp-3) var(--sp-5); }
+
+/* ---- KPI CARDS (premium: icon, big value, hover lift, accent) ---- */
+.erp-dash-grid{ grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:var(--sp-4); }
+.erp-kpi{ position:relative; padding:var(--sp-5); border-radius:var(--r-lg); overflow:hidden;
+  transition:box-shadow var(--motion) var(--ease), transform var(--motion) var(--ease); }
+.erp-kpi:hover{ box-shadow:var(--shadow-card-hover); transform:translateY(-3px); }
+.erp-kpi__top{ display:flex; align-items:flex-start; justify-content:space-between; gap:var(--sp-3); }
+.erp-kpi__label{ font-size:var(--fs-11); color:var(--c-text-muted); font-weight:var(--fw-semibold);
+  text-transform:uppercase; letter-spacing:.04em; }
+.erp-kpi__value{ font-size:var(--fs-28); font-weight:var(--fw-bold); margin:var(--sp-2) 0 0; letter-spacing:-.02em; }
+.erp-kpi__icon{ width:42px; height:42px; border-radius:var(--r-md); display:grid; place-items:center; flex:none;
+  font-size:var(--fs-18); background:var(--c-primary-subtle); color:var(--c-primary); }
+.erp-kpi__icon--indigo{ background:#eef2ff; color:#4f46e5; }
+.erp-kpi__icon--emerald{ background:#ecfdf5; color:#059669; }
+.erp-kpi__icon--amber{ background:#fffbeb; color:#d97706; }
+.erp-kpi__icon--rose{ background:#fef2f2; color:#e11d48; }
+.erp-kpi__icon--cyan{ background:#ecfeff; color:#0891b2; }
+.erp-kpi__icon--violet{ background:#f5f3ff; color:#7c3aed; }
+.erp-kpi__delta{ display:inline-flex; align-items:center; gap:3px; font-size:var(--fs-12); font-weight:var(--fw-semibold); margin-top:var(--sp-2); }
+.erp-kpi--accent{ border-top:0; }
+.erp-kpi--accent::before{ content:""; position:absolute; inset:0 auto 0 0; width:4px; background:var(--c-primary-grad); }
+
+/* ---- MODULE QUICK-ACCESS TILES ---- */
+.erp-module-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(158px,1fr)); gap:var(--sp-3); }
+.erp-module-tile{ display:flex; flex-direction:column; gap:var(--sp-3); padding:var(--sp-4); background:var(--c-surface);
+  border:1px solid var(--c-border); border-radius:var(--r-md); cursor:pointer; color:var(--c-text); text-decoration:none;
+  transition:border-color var(--motion) var(--ease), box-shadow var(--motion) var(--ease), transform var(--motion) var(--ease); }
+.erp-module-tile:hover{ border-color:#c7d2fe; box-shadow:var(--shadow-card-hover); transform:translateY(-3px); text-decoration:none; }
+.erp-module-tile__icon{ width:40px; height:40px; border-radius:var(--r-md); display:grid; place-items:center;
+  font-size:var(--fs-18); background:var(--c-primary-subtle); color:var(--c-primary); }
+.erp-module-tile__label{ font-size:var(--fs-13); font-weight:var(--fw-semibold); }
+.erp-module-tile__sub{ font-size:var(--fs-11); color:var(--c-text-muted); }
+
+/* ---- CHART helpers (recharts lives inside these) ---- */
+.erp-chart{ width:100%; }
+.erp-chart-legend{ display:flex; flex-wrap:wrap; gap:var(--sp-4); font-size:var(--fs-12); color:var(--c-text-secondary); margin-top:var(--sp-2); }
+.erp-chart-legend__item{ display:inline-flex; align-items:center; gap:6px; }
+.erp-chart-legend__dot{ width:10px; height:10px; border-radius:3px; flex:none; }
+.recharts-cartesian-axis-tick text{ fill:var(--c-text-muted); font-size:11px; }
+.recharts-default-tooltip{ border-radius:var(--r-md)!important; border:1px solid var(--c-border)!important;
+  box-shadow:var(--shadow-popover)!important; font-size:12px; }
+
+/* ---- MODAL (blur backdrop, softer dialog) ---- */
+.erp-backdrop{ background:rgba(15,23,42,.5); backdrop-filter:blur(3px); }
+.erp-modal__dialog{ border-radius:var(--r-xl); }
+
+/* ---- BADGES (slightly taller, crisp) ---- */
+.erp-badge{ height:22px; padding:0 10px; }

@@ -1,7 +1,7 @@
 import { Pool } from 'pg';
 import { runRead, Queryable } from '../../db/pool';
 import { RequestContext } from '../../common/request-context';
-import { SalesPipeline, FunnelRow } from './dashboard.types';
+import { SalesPipeline, FunnelRow, TrendRow } from './dashboard.types';
 import {
   WO_TERMINAL_STATUSES,
   INVOICE_CLOSED_STATUSES,
@@ -98,6 +98,72 @@ export class DashboardRepository {
         { stage: 'WON', count: won },
         { stage: 'PROJECT', count: projects },
       ];
+    });
+  }
+
+  /**
+   * Last-6-calendar-months time series for the dashboard trend charts, in one read
+   * transaction. A `generate_series` of the six month-starts (current month back to
+   * 5 months prior) is LEFT JOINed to three independent monthly aggregates so that
+   * months with no rows still appear with 0 (never a gap). Every value is COALESCE'd
+   * to 0 and cast to float8, so a fresh company yields six all-zero rows.
+   *
+   *  - enquiries  = count of sales.enquiry by enquiry_date month
+   *  - quotations = count of sales.quotation by quote_date month
+   *  - revenue    = Σ fin.invoice.taxable_amount (issued: status NOT IN DRAFT/CANCELLED)
+   *                 by invoice_date month — matches the `revenue` KPI definition.
+   */
+  async fetchTrends(ctx: RequestContext): Promise<TrendRow[]> {
+    return runRead(this.pool, ctx, async (c) => {
+      const cid = ctx.companyId;
+      const r = await c.query<{ month: string; label: string; enquiries: number; quotations: number; revenue: number }>(
+        `WITH months AS (
+           SELECT generate_series(
+                    date_trunc('month', current_date) - interval '5 months',
+                    date_trunc('month', current_date),
+                    interval '1 month'
+                  ) AS m
+         ),
+         enq AS (
+           SELECT date_trunc('month', enquiry_date) AS m, count(*) AS n
+             FROM sales.enquiry
+            WHERE company_id = $1
+              AND enquiry_date >= (date_trunc('month', current_date) - interval '5 months')::date
+            GROUP BY 1
+         ),
+         quo AS (
+           SELECT date_trunc('month', quote_date) AS m, count(*) AS n
+             FROM sales.quotation
+            WHERE company_id = $1
+              AND quote_date >= (date_trunc('month', current_date) - interval '5 months')::date
+            GROUP BY 1
+         ),
+         inv AS (
+           SELECT date_trunc('month', invoice_date) AS m, SUM(taxable_amount) AS amt
+             FROM fin.invoice
+            WHERE company_id = $1
+              AND status <> ALL($2::text[])
+              AND invoice_date >= (date_trunc('month', current_date) - interval '5 months')::date
+            GROUP BY 1
+         )
+         SELECT to_char(months.m, 'YYYY-MM')        AS month,
+                to_char(months.m, 'Mon')            AS label,
+                COALESCE(enq.n, 0)::float8          AS enquiries,
+                COALESCE(quo.n, 0)::float8          AS quotations,
+                COALESCE(inv.amt, 0)::float8        AS revenue
+           FROM months
+           LEFT JOIN enq ON enq.m = months.m
+           LEFT JOIN quo ON quo.m = months.m
+           LEFT JOIN inv ON inv.m = months.m
+          ORDER BY months.m`,
+        [cid, [...REVENUE_EXCLUDED_INVOICE_STATUSES]]);
+      return r.rows.map((row) => ({
+        month: row.month,
+        label: row.label,
+        enquiries: Number(row.enquiries),
+        quotations: Number(row.quotations),
+        revenue: Number(row.revenue),
+      }));
     });
   }
 

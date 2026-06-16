@@ -20,6 +20,10 @@ export class DashboardController {
     res.json(await this.service.getSalesFunnel(ctxOf(req)));
   };
 
+  trends = async (req: Request, res: Response) => {
+    res.json({ rows: await this.service.getTrends(ctxOf(req)) });
+  };
+
   exportCsv = async (req: Request, res: Response) => {
     const csv = await this.service.exportKpisCsv(ctxOf(req));
     res.setHeader('Content-Type', 'text/csv');
