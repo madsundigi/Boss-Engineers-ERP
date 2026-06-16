@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useSession } from '../auth/session';
 import { SECTIONS } from './registry';
 import { Icon, iconForPath } from '../components/Icon';
+import { FollowupReminder } from '../components/FollowupReminder';
 
 type IconName = Parameters<typeof Icon>[0]['name'];
 
@@ -50,6 +51,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="erp-shell">
+      <FollowupReminder />
       <header className="erp-topbar">
         <span className="erp-topbar__brand">
           <span className="erp-topbar__logo"><Icon name="bolt" size={18} /></span>
