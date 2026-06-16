@@ -18,11 +18,12 @@ services:
     dockerContext: app
     plan: free                   # sleeps when idle; upgrade to 'starter' for always-on
     healthCheckPath: /health
-    # NOTE: Render free tier does not allow preDeployCommand, so migrations are
-    # applied by the one-time bootstrap (app/scripts/bootstrap-prod.sh, run as the
-    # DB owner) and re-run manually as owner after schema changes. On a paid plan
-    # you can add:  preDeployCommand: node dist/scripts/migrate.js  (with
-    # MIGRATE_DATABASE_URL set to the owner connection string) to auto-migrate.
+    # Migrations AUTO-APPLY on container start (the Docker entrypoint runs the
+    # migrator) WHEN MIGRATE_DATABASE_URL is set to the DB OWNER connection string
+    # — the runtime DATABASE_URL is the restricted erp_app_login, which has no DDL.
+    # This works on the free tier (which forbids preDeployCommand). Leave
+    # MIGRATE_DATABASE_URL unset to keep migrations a manual owner step
+    # (app/scripts/bootstrap-prod.sh). One-time DB bootstrap is still manual.
     envVars:
       - key: NODE_ENV
         value: production
@@ -32,6 +33,11 @@ services:
         # The RLS-enforced app role. After the one-time bootstrap (DEPLOY.md / §Render)
         # creates erp_app_login, set this to that connection string in the dashboard
         # (take the Internal Database URL and swap the user to erp_app_login).
+        sync: false
+      - key: MIGRATE_DATABASE_URL
+        # OWNER connection string (the Internal Database URL with the original owner
+        # user — NOT erp_app_login). Set this in the dashboard to auto-apply pending
+        # migrations on every deploy. Leave unset to migrate manually as owner.
         sync: false
       - key: AUTH_JWT_SECRET
         generateValue: true       # Render generates a strong random secret

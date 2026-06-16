@@ -18,7 +18,15 @@ async function main(): Promise<void> {
   // table OWNER, not the restricted erp_app_login the app uses at runtime.
   // Prefer an explicit owner URL when provided (e.g. Render's MIGRATE_DATABASE_URL).
   const connectionString = process.env.MIGRATE_DATABASE_URL ?? process.env.DATABASE_URL;
-  const pool = new Pool({ connectionString });
+  // Managed Postgres (Render/Neon/etc.) requires TLS. Force it for any non-local
+  // host (rejectUnauthorized:false accepts the provider's cert — the link is still
+  // encrypted). Local dev/test (localhost/127.0.0.1) connects plain.
+  const isLocal = /localhost|127\.0\.0\.1/.test(connectionString ?? '');
+  const wantsSsl = !isLocal || /sslmode=(require|verify|prefer)/.test(connectionString ?? '');
+  const pool = new Pool({
+    connectionString,
+    ...(wantsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+  });
   try {
     await pool.query(`CREATE TABLE IF NOT EXISTS public.schema_migration (
       filename   text PRIMARY KEY,

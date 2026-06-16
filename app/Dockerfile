@@ -35,10 +35,14 @@ COPY --from=build --chown=node:node /app/dist ./dist
 # migrate.js resolves its SQL via __dirname/../migrations -> dist/migrations.
 COPY --from=build --chown=node:node /app/migrations ./dist/migrations
 COPY --chown=node:node package.json ./
+# Entrypoint: migrate-as-owner (when MIGRATE_DATABASE_URL is set) then start the API.
+COPY --chown=node:node scripts/docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
 
 USER node
 EXPOSE 3001
 
-# Start the API. Migrations are applied separately as the DB owner (the bootstrap
-# step, or Render's preDeployCommand) — the runtime role intentionally lacks DDL.
-CMD ["node", "dist/src/server.js"]
+# Auto-applies pending migrations on boot when MIGRATE_DATABASE_URL (owner URL) is
+# set — works on Render's free tier, which forbids preDeployCommand. Without it,
+# the container just starts the API (migrations stay a manual owner step).
+CMD ["./docker-entrypoint.sh"]

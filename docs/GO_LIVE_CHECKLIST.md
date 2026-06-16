@@ -98,6 +98,11 @@ one-click Work-Order auto-fill works. Then create the real users and assign role
 
 ## 5. Reliability (recommended)
 
+- [ ] **Auto-apply migrations on deploy** — set `MIGRATE_DATABASE_URL` on the
+      `be-erp-api` service to the **Internal Database URL (owner user)**. The
+      container then runs pending migrations on every boot, so new-table features
+      stop 500-ing after a deploy. Without it, run each new migration manually:
+      `psql "<owner external URL>?sslmode=require" -v ON_ERROR_STOP=1 -f app/migrations/<NNN>_*.sql`.
 - [ ] **Backups** — schedule `DATABASE_URL='<OWNER DB URL>' app/scripts/backup.sh`
       (custom-format `pg_dump`) on a cron and ship dumps off-box, **or** move
       `be-erp-db` to a Render paid plan for point-in-time recovery.

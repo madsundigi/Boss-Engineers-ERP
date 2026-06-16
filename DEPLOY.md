@@ -37,6 +37,7 @@ postgres://erp_app_login:<ERP_APP_PW>@<host>:5432/boss_engineers_erp
 | Var | Required | Notes |
 |---|---|---|
 | `DATABASE_URL` | yes | the `erp_app_login` connection string (RLS enforced) |
+| `MIGRATE_DATABASE_URL` | recommended | the **owner** connection string. When set, the container auto-applies pending migrations on boot (the runtime role has no DDL). Unset = migrate manually as owner. |
 | `AUTH_JWT_SECRET` | yes (prod) | long random; without it prod rejects every request |
 | `AUTH_JWT_TTL` | no | token lifetime, default `8h` |
 | `CORS_ORIGINS` | yes (browser) | comma-separated allowlist incl. the desktop app origin |
@@ -63,7 +64,10 @@ server runs as the restricted **erp_app_login** (`DATABASE_URL`) so RLS is enfor
    This builds the schema, migrates, creates `erp_app_login`, and sets `admin`'s password.
 3. **Set the app's DATABASE_URL.** Take the **Internal Database URL**, swap the
    user to `erp_app_login` and the password to your `ERP_APP_PW`, and paste it into
-   the `be-erp-api` service env (`DATABASE_URL`).
+   the `be-erp-api` service env (`DATABASE_URL`). **Also set `MIGRATE_DATABASE_URL`**
+   to the Internal Database URL *unchanged* (the owner user) — the container then
+   auto-applies pending migrations on every deploy (free-tier-safe; no
+   `preDeployCommand` needed). Omit it to keep migrations a manual owner step.
 4. **Set CORS_ORIGINS** to your desktop/web origin(s) (for the Electron app you can
    use `*` since it disables web security, or your web host URL).
 5. **Deploy.** `preDeployCommand` migrates as the owner; the server boots as
