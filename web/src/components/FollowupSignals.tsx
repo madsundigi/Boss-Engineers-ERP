@@ -9,8 +9,8 @@ interface DashboardResp {
 
 /**
  * "Follow-ups due" dashboard panel: a 3-chip roll-up (Due / Upcoming / Missed)
- * over a list of the caller's pending follow-ups, each line carrying a blinking
- * colored urgency signal. Render on the Executive Dashboard.
+ * over ALL pending company follow-ups, each line carrying a blinking colored
+ * urgency signal + who it is assigned to. Render on the Executive Dashboard.
  */
 export function FollowupSignals() {
   const [data, setData] = useState<DashboardResp | null>(null);
@@ -18,7 +18,9 @@ export function FollowupSignals() {
 
   useEffect(() => {
     let live = true;
-    api.get<DashboardResp>('/api/followups/dashboard?mine=true')
+    // Company-wide view (not ?mine=true) so the dashboard surfaces every team
+    // member's due/upcoming/missed follow-ups, not only the signed-in user's.
+    api.get<DashboardResp>('/api/followups/dashboard')
       .then((d) => { if (live) setData(d); })
       .catch((e: ApiError) => { if (live) setError(e); });
     return () => { live = false; };
@@ -58,6 +60,7 @@ export function FollowupSignals() {
                       <span className="cell-mono" style={{ fontWeight: 600 }}>{f.enquiryNo}</span>
                       <span className="muted"> · {f.customerName}</span>
                       <span> — {f.followupType.toLowerCase()}</span>
+                      {f.assignedToName && <span className="muted"> · {f.assignedToName}</span>}
                     </span>
                     <span className="cell-mono muted">{f.scheduledDate}</span>
                   </div>
