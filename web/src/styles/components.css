@@ -405,3 +405,21 @@ body{ font-size:var(--fs-14); -webkit-font-smoothing:antialiased; text-rendering
 
 /* ---- BADGES (slightly taller, crisp) ---- */
 .erp-badge{ height:22px; padding:0 10px; }
+
+/* ---- DASHBOARD FOLLOW-UP BOARD (clickable KPI tiles + table) ---- */
+.erp-fu-kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:var(--sp-3); margin-bottom:var(--sp-4); }
+.erp-fu-kpi{ display:flex; flex-direction:column; gap:2px; padding:var(--sp-3) var(--sp-4); text-align:left;
+  background:var(--c-surface); border:1px solid var(--c-border); border-left:4px solid var(--c-border-strong);
+  border-radius:var(--r-md); cursor:pointer; font:inherit; color:var(--c-text);
+  transition:box-shadow var(--motion) var(--ease), transform var(--motion) var(--ease), border-color var(--motion) var(--ease); }
+.erp-fu-kpi:hover{ box-shadow:var(--shadow-card-hover); transform:translateY(-2px); }
+.erp-fu-kpi.is-active{ box-shadow:0 0 0 3px var(--c-focus-ring); }
+.erp-fu-kpi__value{ font-size:var(--fs-24); font-weight:var(--fw-bold); letter-spacing:-.02em; line-height:1.15; }
+.erp-fu-kpi__label{ font-size:var(--fs-11); color:var(--c-text-muted); text-transform:uppercase;
+  letter-spacing:.04em; font-weight:var(--fw-semibold); }
+.erp-fu-kpi--due{ border-left-color:#e5484d; }      .erp-fu-kpi--due.is-active{ border-color:#e5484d; }
+.erp-fu-kpi--upcoming{ border-left-color:#f59e0b; } .erp-fu-kpi--upcoming.is-active{ border-color:#f59e0b; }
+.erp-fu-kpi--missed{ border-left-color:#7a1020; }   .erp-fu-kpi--missed.is-active{ border-color:#7a1020; }
+.erp-fu-kpi--total{ border-left-color:var(--c-primary); } .erp-fu-kpi--total.is-active{ border-color:var(--c-primary); }
+.erp-table tbody tr.is-clickable{ cursor:pointer; }
+@media (max-width:720px){ .erp-fu-kpis{ grid-template-columns:repeat(2,1fr); } }
