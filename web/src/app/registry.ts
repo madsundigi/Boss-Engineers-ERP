@@ -12,6 +12,20 @@ export interface ResourceDef {
   idKey?: string;
   /** one-click "carry forward" buttons rendered per row (e.g. Enquiry → Quote). */
   rowActions?: RowActionDef[];
+  /** server-side filter inputs rendered as a bar above the table. Non-empty
+   *  values are AND-combined into one query string the backend ANDs. */
+  filters?: FilterDef[];
+}
+
+/** A single filter input in the list-view filter bar. Each maps to one optional
+ *  query param on the resource's list endpoint; the backend ANDs all of them. */
+export interface FilterDef {
+  key: string;            // state key
+  label: string;          // shown above/with the input
+  param?: string;         // query-param name (defaults to key)
+  type: 'text' | 'select' | 'date' | 'user';
+  options?: readonly string[];  // for type 'select'
+  placeholder?: string;
 }
 
 /** A one-click action on a row. API kinds create the next document; modal kinds
@@ -43,6 +57,15 @@ export const SECTIONS: NavSection[] = [
           { label: '→ Quote', kind: 'enquiryToQuote' },
           { label: 'Assign', kind: 'assignPerson' },
           { label: 'Follow-ups', kind: 'followups' },
+        ],
+        filters: [
+          { key: 'enquiryNo', label: 'Enquiry No', type: 'text' },
+          { key: 'customerName', label: 'Customer', type: 'text' },
+          { key: 'machineType', label: 'Machine Type', type: 'text' },
+          { key: 'assignedTo', label: 'Assigned To', type: 'user' },
+          { key: 'status', label: 'Status', type: 'select', options: ['NEW', 'QUALIFIED', 'QUOTED', 'CONVERTED', 'LOST', 'ON_HOLD'] },
+          { key: 'followUpFrom', label: 'Follow-up from', type: 'date' },
+          { key: 'followUpTo', label: 'Follow-up to', type: 'date' },
         ] },
       { path: 'opportunities', label: 'Opportunities', endpoint: '/api/crm/opportunities', idKey: 'oppId' },
       { path: 'quotations', label: 'Quotations', endpoint: '/api/quotations', idKey: 'quotationId' },

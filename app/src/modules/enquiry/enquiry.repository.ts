@@ -111,6 +111,12 @@ export class EnquiryRepository {
       const i = params.length;
       where.push(`(customer_name ILIKE $${i} OR contact_person ILIKE $${i} OR email ILIKE $${i})`);
     }
+    if (q.enquiryNo) { params.push(`%${q.enquiryNo}%`); where.push(`enquiry_no ILIKE $${params.length}`); }
+    if (q.customerName) { params.push(`%${q.customerName}%`); where.push(`customer_name ILIKE $${params.length}`); }
+    if (q.machineType) { params.push(`%${q.machineType}%`); where.push(`machine_type ILIKE $${params.length}`); }
+    if (q.assignedTo !== undefined) { params.push(q.assignedTo); where.push(`assigned_to = $${params.length}`); }
+    if (q.followUpFrom) { params.push(q.followUpFrom); where.push(`follow_up_date >= $${params.length}`); }
+    if (q.followUpTo) { params.push(q.followUpTo); where.push(`follow_up_date <= $${params.length}`); }
     const whereSql = where.join(' AND ');
     const offset = (q.page - 1) * q.pageSize;
 

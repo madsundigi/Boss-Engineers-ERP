@@ -4,6 +4,7 @@ import { api, ApiError } from '../api/client';
 import { ResourceDef, RowActionDef, formFor, docFormFor, idOf, DocFormDef, FormField } from '../app/registry';
 import { ResourceForm } from './ResourceForm';
 import { RowActionModals, ModalAction } from './RowActionModals';
+import { FilterBar, FilterValues, buildFilterQuery } from './FilterBar';
 
 type Row = Record<string, unknown>;
 
@@ -88,6 +89,7 @@ export function ResourceList({ def }: { def: ResourceDef }) {
   const [editRow, setEditRow] = useState<Row | null>(null);
   const [busyId, setBusyId] = useState<unknown>(null);
   const [modalAction, setModalAction] = useState<ModalAction | null>(null);
+  const [filterValues, setFilterValues] = useState<FilterValues>({});
   const form = formFor(def.path);
   const doc = docFormFor(def.path);
   const navigate = useNavigate();
@@ -111,16 +113,22 @@ export function ResourceList({ def }: { def: ResourceDef }) {
     }
   }
 
+  // Build the list endpoint with the active filters appended as a query string.
+  // Resources without `def.filters` produce an empty query, so the URL — and the
+  // fetch behaviour — are byte-for-byte identical to before.
+  const filterQuery = def.filters?.length ? buildFilterQuery(def.filters, filterValues) : '';
+  const endpoint = filterQuery ? `${def.endpoint}?${filterQuery}` : def.endpoint;
+
   useEffect(() => {
     let live = true;
     setLoading(true);
     setError(null);
-    api.get<unknown>(def.endpoint)
+    api.get<unknown>(endpoint)
       .then((data) => { if (!live) return; const r = extractRows(data); setRows(r.rows); setTotal(r.total); })
       .catch((e: ApiError) => { if (live) setError(e); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [def.endpoint, reload]);
+  }, [endpoint, reload]);
 
   const columns = (def.columns && def.columns.length ? def.columns : deriveColumns(rows)) ?? [];
   const refresh = () => setReload((n) => n + 1);
@@ -253,6 +261,10 @@ export function ResourceList({ def }: { def: ResourceDef }) {
         onClose={() => setModalAction(null)}
         onSaved={() => { setModalAction(null); refresh(); }}
       />
+
+      {def.filters?.length ? (
+        <FilterBar filters={def.filters} onChange={setFilterValues} />
+      ) : null}
 
       {error && (
         <div className={`erp-alert ${error.status === 403 ? 'erp-alert--warning' : 'erp-alert--error'}`} role="alert">

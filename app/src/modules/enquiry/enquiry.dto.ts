@@ -58,9 +58,18 @@ export const listQuerySchema = z.object({
   status: z.enum(ENQUIRY_STATUS).optional(),
   source: z.enum(ENQUIRY_SOURCE).optional(),
   q: z.string().trim().max(160).optional(), // free-text on customer/contact/email
+  // Column-specific filters (all optional, AND-combined with the above).
+  enquiryNo: trimmed(60).optional(), // partial, case-insensitive on enquiry_no
+  customerName: trimmed(160).optional(), // partial, case-insensitive on customer_name
+  machineType: trimmed(120).optional(), // partial, case-insensitive on machine_type
+  assignedTo: z.coerce.number().int().positive().optional(), // exact assignee user id
+  followUpFrom: ymd.optional(), // follow_up_date >= (inclusive)
+  followUpTo: ymd.optional(), // follow_up_date <= (inclusive)
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(25),
-  sort: z.enum(['enquiry_no', 'customer_name', 'status', 'created_at']).default('created_at'),
+  sort: z
+    .enum(['enquiry_no', 'customer_name', 'status', 'created_at', 'machine_type', 'follow_up_date'])
+    .default('created_at'),
   dir: z.enum(['asc', 'desc']).default('desc'),
 });
 export type ListQueryDto = z.infer<typeof listQuerySchema>;

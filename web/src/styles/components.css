@@ -159,6 +159,15 @@ a:hover{ text-decoration:underline; }
   border-radius:var(--r-sm); cursor:pointer; color:var(--c-text-secondary); }
 .erp-pagination__btn:disabled{ opacity:.4; cursor:not-allowed; }
 
+/* Filter bar — registry-driven, multi-field list filter (sits above a table).
+   Fields lay out on an auto-fill grid so they wrap tidily on narrow widths. */
+.erp-filter-bar{ padding:var(--sp-3) var(--sp-4); }
+.erp-filter-bar__head{ display:flex; align-items:center; gap:var(--sp-3); }
+.erp-filter-bar__spacer{ flex:1; }
+.erp-filter-bar__grid{ display:grid; gap:var(--sp-3) var(--sp-4); margin-top:var(--sp-3);
+  grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); }
+.erp-filter-bar__field{ min-width:0; }
+
 /* =====================================================================
    7. FORMS
    ===================================================================== */

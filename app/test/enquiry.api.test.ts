@@ -108,6 +108,110 @@ d('Enquiry API (integration)', () => {
     expect(res.text).toContain('Enquiry No');
   });
 
+  describe('list filters (multi-field, AND-combined)', () => {
+    // A per-run stamp keeps the fixtures idempotent: every run seeds fresh rows
+    // and every assertion is scoped to this stamp, so rows from earlier runs (or
+    // the suite above) never leak into the counts.
+    const stamp = `F${Date.now()}`;
+    const mtAlpha = `${stamp}-ALPHA`;
+    const mtBeta = `${stamp}-BETA`;
+    let alphaId: number; // machineType=ALPHA, customer A, follow-up 2026-08-01, assigned salesUser
+    let betaId: number; //  machineType=BETA,  customer B, follow-up 2026-09-15, assigned storesUser, then QUALIFIED
+
+    const seed = async (over: Record<string, unknown>) => {
+      const res = await request(app).post('/api/enquiries').set(hdr(salesUser)).send({
+        customerName: 'seed', source: 'WEB', ...over,
+      });
+      expect(res.status).toBe(201);
+      return res.body as { enquiryId: number; rowVersion: number };
+    };
+
+    beforeAll(async () => {
+      const a = await seed({
+        customerName: `${stamp} Alpha Customer`, machineType: mtAlpha, followUpDate: '2026-08-01',
+      });
+      alphaId = a.enquiryId;
+      const b = await seed({
+        customerName: `${stamp} Beta Customer`, machineType: mtBeta, followUpDate: '2026-09-15',
+      });
+      betaId = b.enquiryId;
+      // assigned_to: alpha -> salesUser, beta -> storesUser (exact-match filter target)
+      const asgA = await request(app).post(`/api/enquiries/${alphaId}/assign`).set(hdr(salesUser)).send({ userId: salesUser });
+      expect(asgA.status).toBe(200);
+      const asgB = await request(app).post(`/api/enquiries/${betaId}/assign`).set(hdr(salesUser)).send({ userId: storesUser });
+      expect(asgB.status).toBe(200);
+      // give beta a non-NEW status so the status+machineType combo test is meaningful
+      const qual = await request(app).post(`/api/enquiries/${betaId}/status`).set(hdr(salesUser))
+        .send({ status: 'QUALIFIED', rowVersion: asgB.body.rowVersion });
+      expect(qual.status).toBe(200);
+    });
+
+    const list = (qs: string) =>
+      request(app).get(`/api/enquiries?pageSize=200&${qs}`).set(hdr(salesUser));
+
+    it('machineType is a partial, case-insensitive match', async () => {
+      const res = await list(`machineType=${mtAlpha.toLowerCase()}`);
+      expect(res.status).toBe(200);
+      expect(res.body.total).toBe(1);
+      expect(res.body.rows.map((r: any) => r.enquiryId)).toEqual([alphaId]);
+      expect(res.body.rows[0].machineType).toBe(mtAlpha);
+    });
+
+    it('enquiryNo narrows by partial enquiry number', async () => {
+      const full = (await request(app).get(`/api/enquiries/${alphaId}`).set(hdr(salesUser))).body.enquiryNo as string;
+      const frag = full.slice(-6); // gapless serial tail is unique to this row
+      const res = await list(`enquiryNo=${encodeURIComponent(frag)}`);
+      expect(res.status).toBe(200);
+      expect(res.body.rows.map((r: any) => r.enquiryId)).toContain(alphaId);
+      expect(res.body.rows.every((r: any) => r.enquiryNo.includes(frag))).toBe(true);
+    });
+
+    it('customerName is a partial, case-insensitive match', async () => {
+      // scope to this run's two rows via the stamp, then narrow by the per-row token
+      const both = await list(`customerName=${stamp}`);
+      expect(both.body.total).toBe(2);
+      const res = await list(`customerName=${stamp} alpha`);
+      expect(res.body.total).toBe(1);
+      expect(res.body.rows[0].enquiryId).toBe(alphaId);
+    });
+
+    it('assignedTo is an exact assignee-id match', async () => {
+      const sales = await list(`customerName=${stamp}&assignedTo=${salesUser}`);
+      expect(sales.body.rows.map((r: any) => r.enquiryId)).toEqual([alphaId]);
+      expect(sales.body.rows[0].assignedTo).toBe(salesUser);
+      const stores = await list(`customerName=${stamp}&assignedTo=${storesUser}`);
+      expect(stores.body.rows.map((r: any) => r.enquiryId)).toEqual([betaId]);
+    });
+
+    it('followUpFrom / followUpTo bound the follow-up date (inclusive)', async () => {
+      const from = await list(`customerName=${stamp}&followUpFrom=2026-09-01`);
+      expect(from.body.rows.map((r: any) => r.enquiryId)).toEqual([betaId]);
+      const to = await list(`customerName=${stamp}&followUpTo=2026-08-31`);
+      expect(to.body.rows.map((r: any) => r.enquiryId)).toEqual([alphaId]);
+      // inclusive endpoints: a window covering exactly 2026-08-01 keeps alpha
+      const window = await list(`customerName=${stamp}&followUpFrom=2026-08-01&followUpTo=2026-08-01`);
+      expect(window.body.rows.map((r: any) => r.enquiryId)).toEqual([alphaId]);
+    });
+
+    it('combines two filters with AND (machineType + status)', async () => {
+      // beta is QUALIFIED with mtBeta -> matches; alpha is NEW -> excluded by status
+      const hit = await list(`machineType=${stamp}&status=QUALIFIED`);
+      expect(hit.body.rows.map((r: any) => r.enquiryId)).toEqual([betaId]);
+      // alpha's machineType with QUALIFIED status matches nothing (alpha is NEW)
+      const miss = await list(`machineType=${mtAlpha}&status=QUALIFIED`);
+      expect(miss.body.total).toBe(0);
+    });
+
+    it('accepts the new sort columns (machine_type, follow_up_date)', async () => {
+      const byFollowUp = await list(`customerName=${stamp}&sort=follow_up_date&dir=asc`);
+      expect(byFollowUp.status).toBe(200);
+      expect(byFollowUp.body.rows.map((r: any) => r.enquiryId)).toEqual([alphaId, betaId]);
+      const byMachine = await list(`customerName=${stamp}&sort=machine_type&dir=asc`);
+      expect(byMachine.status).toBe(200);
+      expect(byMachine.body.rows.map((r: any) => r.enquiryId)).toEqual([alphaId, betaId]);
+    });
+  });
+
   it('RLS isolates tenants even on an unfiltered query (BUG-01 fix)', async () => {
     // Under the erp_app role, an UNFILTERED scan still returns 0 rows for a
     // different company and >0 for the correct one — proving RLS is enforced,
