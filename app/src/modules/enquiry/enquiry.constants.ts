@@ -6,12 +6,19 @@ export type EnquiryStatus = (typeof ENQUIRY_STATUS)[number];
 export const ENQUIRY_SOURCE = ['EMAIL', 'WEB', 'PHONE', 'WALKIN', 'REP', 'REFERRAL', 'EXHIBITION', 'OTHER'] as const;
 export type EnquirySource = (typeof ENQUIRY_SOURCE)[number];
 
-/** Allowed status transitions (lead lifecycle). Deny anything not listed. */
+/**
+ * Allowed status transitions (lead lifecycle). Deny anything not listed.
+ *
+ * Happy path: NEW -> QUALIFIED -> QUOTED -> CONVERTED. Any ACTIVE stage
+ * (NEW / QUALIFIED / QUOTED) can be paused to ON_HOLD and resumed back to any
+ * active stage, or marked LOST (a reason is required). CONVERTED and LOST are
+ * terminal.
+ */
 export const STATUS_TRANSITIONS: Record<EnquiryStatus, EnquiryStatus[]> = {
   NEW: ['QUALIFIED', 'ON_HOLD', 'LOST'],
   QUALIFIED: ['QUOTED', 'ON_HOLD', 'LOST'],
-  QUOTED: ['CONVERTED', 'LOST'],
-  ON_HOLD: ['NEW', 'QUALIFIED', 'LOST'],
+  QUOTED: ['CONVERTED', 'ON_HOLD', 'LOST'],          // a sent quote can be paused
+  ON_HOLD: ['NEW', 'QUALIFIED', 'QUOTED', 'LOST'],   // resume to any active stage
   CONVERTED: [], // terminal
   LOST: [], // terminal
 };

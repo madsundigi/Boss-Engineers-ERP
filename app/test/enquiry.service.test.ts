@@ -101,6 +101,18 @@ describe('EnquiryService', () => {
       const out = await service.changeStatus(ctx, 10, { status: 'QUALIFIED', rowVersion: 1 });
       expect(out.status).toBe('QUALIFIED');
     });
+    it('can pause a quoted enquiry (QUOTED -> ON_HOLD)', async () => {
+      repo.findById.mockResolvedValue({ ...sample, status: 'QUOTED' });
+      repo.changeStatus.mockResolvedValue({ ...sample, status: 'ON_HOLD', rowVersion: 2 });
+      const out = await service.changeStatus(ctx, 10, { status: 'ON_HOLD', rowVersion: 1 });
+      expect(out.status).toBe('ON_HOLD');
+    });
+    it('can resume a held enquiry back to QUOTED (ON_HOLD -> QUOTED)', async () => {
+      repo.findById.mockResolvedValue({ ...sample, status: 'ON_HOLD' });
+      repo.changeStatus.mockResolvedValue({ ...sample, status: 'QUOTED', rowVersion: 2 });
+      const out = await service.changeStatus(ctx, 10, { status: 'QUOTED', rowVersion: 1 });
+      expect(out.status).toBe('QUOTED');
+    });
   });
 
   describe('approve', () => {
