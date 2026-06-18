@@ -54,7 +54,7 @@ import { fatProtocolRouter } from './modules/fatprotocol/fatprotocol.routes';
 import {
   invoicePostedGlHandler, paymentReceivedGlHandler, vendorInvoiceApprovedGlHandler,
 } from './modules/gl/gl.handlers';
-import { quotationWonHandler } from './modules/project/project.handlers';
+import { quotationWonHandler, enquiryWonHandler } from './modules/project/project.handlers';
 import { fatPassedClearQualityHandler, dispatchReleasedNotifyCustomerHandler } from './modules/dispatch/dispatch.handlers';
 import { dispatchReleasedWarrantyHandler } from './modules/service/service.handlers';
 import { installationAcceptedBillingHandler } from './modules/billing/billing.handlers';
@@ -161,6 +161,8 @@ export function createApp(pool: Pool, deps: AppDeps = {}): Express {
     ['quotation.sent', quotationSentHandler(pool, new PdfService(), email)],
     // Winning a quotation auto-seeds a Project (idempotent on quotation_id).
     ['quotation.won', quotationWonHandler(pool)],
+    // Winning an enquiry auto-seeds a Project from it (idempotent on enquiry_id).
+    ['enquiry.won', enquiryWonHandler(pool)],
     ['project.created', ack],
     ['project.approved', ack],
     // FAT pass opens the linked dispatch's quality gate.

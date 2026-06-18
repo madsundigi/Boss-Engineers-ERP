@@ -5,6 +5,7 @@ import { ResourceDef, RowActionDef, formFor, docFormFor, idOf, DocFormDef, FormF
 import { ResourceForm } from './ResourceForm';
 import { RowActionModals, ModalAction } from './RowActionModals';
 import { FilterBar, FilterValues, buildFilterQuery } from './FilterBar';
+import { StatusCell } from './StatusCell';
 
 type Row = Record<string, unknown>;
 
@@ -178,14 +179,7 @@ export function ResourceList({ def }: { def: ResourceDef }) {
     setActionError(null);
     setBusyId(id);
     try {
-      if (action.kind === 'enquiryToQuote') {
-        // Convert requires a QUALIFIED enquiry — auto-qualify a NEW one first.
-        if (String(row.status ?? '').toUpperCase() === 'NEW') {
-          await api.post(`/api/enquiries/${sid}/approve`, { rowVersion: row.rowVersion });
-        }
-        await api.post(`/api/quotations/from-enquiry/${sid}`, {});
-        navigate('/r/quotations');
-      } else if (action.kind === 'receivePo') {
+      if (action.kind === 'receivePo') {
         await api.post(`/api/procurement/purchase-orders/${sid}/receive`, {});
         navigate('/r/grn');
       } else if (action.kind === 'invoiceFromProject') {
@@ -305,6 +299,23 @@ export function ResourceList({ def }: { def: ResourceDef }) {
                   <tr key={i}>
                     {columns.map((c) => {
                       const v = row[c.key];
+                      const statusKey = def.statusEdit?.statusKey ?? 'status';
+                      if (def.statusEdit && c.key === statusKey && v != null) {
+                        return (
+                          <td key={c.key}>
+                            <StatusCell
+                              def={def}
+                              row={row}
+                              id={id}
+                              current={String(v)}
+                              busy={rowBusy}
+                              onBusy={setBusyId}
+                              onError={setActionError}
+                              onDone={refresh}
+                            />
+                          </td>
+                        );
+                      }
                       if (c.kind === 'status' && v != null) {
                         return <td key={c.key}><span className={`erp-badge erp-badge--${badgeClass(String(v))}`}>{String(v)}</span></td>;
                       }

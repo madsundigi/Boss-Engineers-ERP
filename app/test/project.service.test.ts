@@ -11,7 +11,7 @@ const ctx: RequestContext = {
 
 const sample: Project = {
   projectId: 10, projectNo: 'PRJ/MUM/2026-27/00010', companyId: 1, buId: 1,
-  projectName: 'EOT Crane Package', customerId: 5, quotationId: null,
+  projectName: 'EOT Crane Package', customerId: 5, quotationId: null, enquiryId: null,
   contractValue: 9500000, budgetCost: 8000000, pmUserId: 7,
   plannedStart: null, plannedEnd: null, contractualEnd: null, ldPctPerWeek: null,
   status: 'PLANNING', healthRag: null, createdAt: 't', createdBy: 1, updatedAt: 't', rowVersion: 1,

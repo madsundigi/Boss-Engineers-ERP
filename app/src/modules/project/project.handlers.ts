@@ -70,6 +70,94 @@ async function resolveOrCreateCustomer(
   });
 }
 
+/**
+ * Any active, non-deleted app user — the last-resort project manager when an
+ * enquiry carries neither an assignee nor a creator and the event has no acting
+ * user. proj.project.pm_user_id is NOT NULL, so a real user_id is required.
+ * (sec.app_user is global, not company-scoped, so no tenant filter applies.)
+ */
+async function firstActiveUserId(pool: Pool, ctx: RequestContext): Promise<number | null> {
+  return runRead(pool, ctx, async (c) => {
+    const r = await c.query(
+      `SELECT user_id FROM sec.app_user WHERE is_active AND NOT is_deleted ORDER BY user_id LIMIT 1`);
+    return r.rowCount ? Number(r.rows[0].user_id) : null;
+  });
+}
+
+/**
+ * Cross-module workflow trigger: 'enquiry.won' -> seed a Project FROM the
+ * enquiry (mirrors quotation.won -> project). The relay invokes this AFTER the
+ * enquiry has committed as WON. Reuses ProjectRepository.create (gapless
+ * numbering + project.created event) so no project SQL is duplicated.
+ *
+ * Idempotent: proj.project carries the source enquiry_id, so a re-delivered
+ * event finds the existing project and bails — never creating a duplicate.
+ */
+export function enquiryWonHandler(pool: Pool): OutboxHandler {
+  const repo = new ProjectRepository(pool);
+  return async (e: OutboxRecord): Promise<void> => {
+    if (e.aggregateId == null) return;
+    const enquiryId = e.aggregateId;
+    const ctx0 = systemContext(e, null);
+
+    // Idempotency: a project already seeded from this enquiry?
+    const exists = await runRead(pool, ctx0, async (c) => {
+      const r = await c.query(
+        `SELECT 1 FROM proj.project WHERE enquiry_id = $1 AND company_id = $2 LIMIT 1`,
+        [enquiryId, ctx0.companyId]);
+      return (r.rowCount ?? 0) > 0;
+    });
+    if (exists) return;
+
+    // Read the won enquiry. customer_id is the real FK (set once a master is
+    // picked); customer_name is the free-text intake capture used otherwise.
+    const enq = await runRead(pool, ctx0, async (c) => {
+      const r = await c.query(
+        `SELECT enquiry_no, customer_id, customer_name, machine_type,
+                target_value, assigned_to, created_by
+           FROM sales.enquiry WHERE enquiry_id = $1 AND company_id = $2`,
+        [enquiryId, ctx0.companyId]);
+      return r.rowCount ? r.rows[0] : null;
+    });
+    if (!enq) return;
+
+    // Resolve the Customer master: reuse the linked one, else promote the
+    // free-text lead name (reuse-by-name, else create). No name -> cannot seed.
+    let customerId = enq.customer_id == null ? null : Number(enq.customer_id);
+    if (customerId == null) {
+      customerId = await resolveOrCreateCustomer(pool, ctx0, (enq.customer_name ?? '').trim());
+      if (customerId == null) return;
+    }
+
+    const buId = await resolveBuId(pool, ctx0);
+    if (buId == null) return;
+    const ctx = systemContext(e, buId);
+
+    // pm_user_id is NOT NULL: prefer the enquiry's assignee, then its creator,
+    // then the acting user, then any active user. Bail only if none can be found.
+    const pmUserId =
+      (enq.assigned_to == null ? null : Number(enq.assigned_to)) ??
+      (enq.created_by == null ? null : Number(enq.created_by)) ??
+      (ctx.userId || null) ??
+      (await firstActiveUserId(pool, ctx));
+    if (pmUserId == null) return;
+
+    await repo.create(ctx, {
+      projectName: enq.machine_type || `Project — ${enq.enquiry_no}`,
+      customerId,
+      pmUserId,
+      contractValue: Number(enq.target_value ?? 0),
+      budgetCost: 0,
+      quotationId: null,
+      enquiryId,
+    }, {
+      eventType: 'project.created', aggregateType: 'PROJECT',
+      companyId: ctx.companyId, createdBy: ctx.userId,
+      payload: { enquiryId, customerId, seededFrom: 'enquiry.won' },
+    });
+  };
+}
+
 export function quotationWonHandler(pool: Pool): OutboxHandler {
   const repo = new ProjectRepository(pool);
   return async (e: OutboxRecord): Promise<void> => {

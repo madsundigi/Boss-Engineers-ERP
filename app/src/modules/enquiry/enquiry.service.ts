@@ -1,5 +1,6 @@
 import { Errors } from '../../common/http-error';
 import { RequestContext } from '../../common/request-context';
+import { OutboxEventInput } from '../../outbox/outbox';
 import { EnquiryRepository } from './enquiry.repository';
 import { Enquiry, EnquiryListResult } from './enquiry.types';
 import { CreateEnquiryDto, UpdateEnquiryDto, ChangeStatusDto, ListQueryDto } from './enquiry.dto';
@@ -36,7 +37,7 @@ export class EnquiryService {
       throw Errors.badRequest('No fields supplied to update');
     }
     const existing = await this.getById(ctx, id); // 404 if missing
-    if (existing.status === 'CONVERTED' || existing.status === 'LOST') {
+    if (existing.status === 'WON' || existing.status === 'LOST') {
       throw Errors.conflict(`Cannot edit an enquiry in status ${existing.status}`);
     }
     const updated = await this.repo.update(ctx, id, rowVersion, fields);
@@ -57,7 +58,17 @@ export class EnquiryService {
     if (dto.status === 'LOST' && !dto.reason) {
       throw Errors.badRequest('A reason is required when marking an enquiry LOST');
     }
-    const updated = await this.repo.changeStatus(ctx, id, dto.rowVersion, dto.status, null);
+    // Winning the enquiry auto-seeds a Project (FRD §5). Emit 'enquiry.won' in the
+    // SAME transaction as the status UPDATE so the project seed can never diverge
+    // from a state change that didn't persist (transactional outbox).
+    const event: OutboxEventInput | undefined =
+      dto.status === 'WON'
+        ? {
+            eventType: 'enquiry.won', aggregateType: 'ENQUIRY', aggregateId: id,
+            companyId: ctx.companyId, createdBy: ctx.userId, payload: { enquiryId: id },
+          }
+        : undefined;
+    const updated = await this.repo.changeStatus(ctx, id, dto.rowVersion, dto.status, null, event);
     if (!updated) {
       throw Errors.conflict('Enquiry was modified by someone else (row version mismatch)');
     }

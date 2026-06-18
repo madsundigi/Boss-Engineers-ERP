@@ -15,6 +15,14 @@ export interface ResourceDef {
   /** server-side filter inputs rendered as a bar above the table. Non-empty
    *  values are AND-combined into one query string the backend ANDs. */
   filters?: FilterDef[];
+  /** inline, sequence-restricted status editor on rows. When set, the status
+   *  column renders the current badge plus a `<select>` of allowed next states
+   *  (`transitions[current]`); choosing one POSTs `{endpoint}/{id}/status`. */
+  statusEdit?: {
+    statusKey?: string;                              // column key, default 'status'
+    transitions: Record<string, readonly string[]>;  // current -> allowed next
+    reasonOn?: readonly string[];                    // statuses that need a reason (e.g. ['LOST'])
+  };
 }
 
 /** A single filter input in the list-view filter bar. Each maps to one optional
@@ -32,7 +40,7 @@ export interface FilterDef {
  *  ('assignPerson' / 'followups') open an in-place modal instead of a call. */
 export interface RowActionDef {
   label: string;
-  kind: 'enquiryToQuote' | 'receivePo' | 'invoiceFromProject' | 'assignPerson' | 'followups';
+  kind: 'receivePo' | 'invoiceFromProject' | 'assignPerson' | 'followups';
 }
 
 export interface NavSection {
@@ -54,21 +62,32 @@ export const SECTIONS: NavSection[] = [
           { key: 'followUpDate', label: 'Follow-Up Date', kind: 'date' },
         ],
         rowActions: [
-          { label: '→ Quote', kind: 'enquiryToQuote' },
           { label: 'Assign', kind: 'assignPerson' },
           { label: 'Follow-ups', kind: 'followups' },
         ],
+        statusEdit: {
+          statusKey: 'status',
+          reasonOn: ['LOST'],
+          transitions: {
+            NEW: ['QUALIFIED', 'ON_HOLD', 'LOST'],
+            QUALIFIED: ['QUOTED', 'ON_HOLD', 'LOST'],
+            QUOTED: ['REVISE_QUOTED', 'WON', 'ON_HOLD', 'LOST'],
+            REVISE_QUOTED: ['QUOTED', 'WON', 'ON_HOLD', 'LOST'],
+            WON: [],
+            LOST: [],
+            ON_HOLD: ['NEW', 'QUALIFIED', 'QUOTED', 'REVISE_QUOTED', 'LOST'],
+          },
+        },
         filters: [
           { key: 'enquiryNo', label: 'Enquiry No', type: 'text' },
           { key: 'customerName', label: 'Customer', type: 'text' },
           { key: 'machineType', label: 'Machine Type', type: 'text' },
           { key: 'assignedTo', label: 'Assigned To', type: 'user' },
-          { key: 'status', label: 'Status', type: 'select', options: ['NEW', 'QUALIFIED', 'QUOTED', 'CONVERTED', 'LOST', 'ON_HOLD'] },
+          { key: 'status', label: 'Status', type: 'select', options: ['NEW', 'QUALIFIED', 'QUOTED', 'REVISE_QUOTED', 'WON', 'LOST', 'ON_HOLD'] },
           { key: 'followUpFrom', label: 'Follow-up from', type: 'date' },
           { key: 'followUpTo', label: 'Follow-up to', type: 'date' },
         ] },
       { path: 'opportunities', label: 'Opportunities', endpoint: '/api/crm/opportunities', idKey: 'oppId' },
-      { path: 'quotations', label: 'Quotations', endpoint: '/api/quotations', idKey: 'quotationId' },
       { path: 'contracts', label: 'Contracts', endpoint: '/api/contracts' },
     ],
   },

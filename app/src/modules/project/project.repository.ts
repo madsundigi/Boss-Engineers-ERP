@@ -7,7 +7,7 @@ import { ListQueryDto } from './project.dto';
 import { DOC_TYPE, ProjectStatus } from './project.constants';
 
 const COLS = `project_id, project_no, company_id, bu_id, project_name, customer_id,
-  quotation_id, contract_value, budget_cost, pm_user_id, planned_start, planned_end,
+  quotation_id, enquiry_id, contract_value, budget_cost, pm_user_id, planned_start, planned_end,
   contractual_end, ld_pct_per_week, status, health_rag,
   created_at, created_by, updated_at, row_version`;
 
@@ -20,6 +20,7 @@ function mapRow(r: QueryResultRow): Project {
     projectName: r.project_name,
     customerId: Number(r.customer_id),
     quotationId: r.quotation_id == null ? null : Number(r.quotation_id),
+    enquiryId: r.enquiry_id == null ? null : Number(r.enquiry_id),
     contractValue: Number(r.contract_value),
     budgetCost: Number(r.budget_cost),
     pmUserId: Number(r.pm_user_id),
@@ -42,7 +43,8 @@ export interface CreateProjectRow {
   pmUserId: number;
   contractValue: number;
   budgetCost: number;
-  quotationId?: number;
+  quotationId?: number | null;
+  enquiryId?: number | null;
   plannedStart?: string;
   plannedEnd?: string;
   contractualEnd?: string;
@@ -61,14 +63,15 @@ export class ProjectRepository {
         `INSERT INTO proj.project
            (company_id, bu_id, project_no, project_name, customer_id, quotation_id,
             contract_value, budget_cost, pm_user_id, planned_start, planned_end,
-            contractual_end, ld_pct_per_week, status, created_by)
+            contractual_end, ld_pct_per_week, status, created_by, enquiry_id)
          VALUES ($1,$2, mdm.next_document_no($1,$2,'${DOC_TYPE}'),
-                 $3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'PLANNING',$13)
+                 $3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'PLANNING',$13,$14)
          RETURNING ${COLS}`,
         [
           ctx.companyId, ctx.buId, data.projectName, data.customerId, data.quotationId ?? null,
           data.contractValue, data.budgetCost, data.pmUserId, data.plannedStart ?? null,
           data.plannedEnd ?? null, data.contractualEnd ?? null, data.ldPctPerWeek ?? null, ctx.userId,
+          data.enquiryId ?? null,
         ],
       );
       // Atomic with the insert: record the domain event (transactional outbox).

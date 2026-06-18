@@ -195,11 +195,8 @@ export class QuotationService {
       payload: { quotationNo: existing.quotationNo },
     });
     if (!q) throw Errors.conflict('Row version mismatch');
-    // sync: the originating enquiry is now CONVERTED
-    if (existing.enquiryId) {
-      const enq = await this.enquiries.findById(ctx, existing.enquiryId);
-      if (enq && enq.status === 'QUOTED') await this.enquiries.changeStatus(ctx, enq.enquiryId, enq.rowVersion, 'CONVERTED', null);
-    }
+    // The enquiry now owns its own deal outcome (WON/LOST via its own workflow);
+    // winning a quote no longer mutates the originating enquiry's status.
     return q;
   }
 

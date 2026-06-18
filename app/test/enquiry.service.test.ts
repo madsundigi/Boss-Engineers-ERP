@@ -68,8 +68,8 @@ describe('EnquiryService', () => {
     it('400 when no fields supplied', async () => {
       await expect(status(service.update(ctx, 10, { rowVersion: 1 }))).resolves.toBe(400);
     });
-    it('409 when enquiry is terminal (CONVERTED/LOST)', async () => {
-      repo.findById.mockResolvedValue({ ...sample, status: 'CONVERTED' });
+    it('409 when enquiry is terminal (WON/LOST)', async () => {
+      repo.findById.mockResolvedValue({ ...sample, status: 'WON' });
       await expect(status(service.update(ctx, 10, { rowVersion: 1, customerName: 'X' }))).resolves.toBe(409);
     });
     it('409 on row-version mismatch', async () => {
@@ -87,9 +87,9 @@ describe('EnquiryService', () => {
   });
 
   describe('changeStatus', () => {
-    it('409 on an illegal transition (NEW -> CONVERTED)', async () => {
+    it('409 on an illegal transition (NEW -> WON)', async () => {
       repo.findById.mockResolvedValue(sample);
-      await expect(status(service.changeStatus(ctx, 10, { status: 'CONVERTED', rowVersion: 1 }))).resolves.toBe(409);
+      await expect(status(service.changeStatus(ctx, 10, { status: 'WON', rowVersion: 1 }))).resolves.toBe(409);
     });
     it('400 when marking LOST without a reason', async () => {
       repo.findById.mockResolvedValue(sample);
@@ -112,6 +112,37 @@ describe('EnquiryService', () => {
       repo.changeStatus.mockResolvedValue({ ...sample, status: 'QUOTED', rowVersion: 2 });
       const out = await service.changeStatus(ctx, 10, { status: 'QUOTED', rowVersion: 1 });
       expect(out.status).toBe('QUOTED');
+    });
+    it('can send a quoted enquiry back for revision (QUOTED -> REVISE_QUOTED)', async () => {
+      repo.findById.mockResolvedValue({ ...sample, status: 'QUOTED' });
+      repo.changeStatus.mockResolvedValue({ ...sample, status: 'REVISE_QUOTED', rowVersion: 2 });
+      const out = await service.changeStatus(ctx, 10, { status: 'REVISE_QUOTED', rowVersion: 1 });
+      expect(out.status).toBe('REVISE_QUOTED');
+    });
+    it('can re-quote after a revision (REVISE_QUOTED -> QUOTED)', async () => {
+      repo.findById.mockResolvedValue({ ...sample, status: 'REVISE_QUOTED' });
+      repo.changeStatus.mockResolvedValue({ ...sample, status: 'QUOTED', rowVersion: 2 });
+      const out = await service.changeStatus(ctx, 10, { status: 'QUOTED', rowVersion: 1 });
+      expect(out.status).toBe('QUOTED');
+    });
+    it('wins a quoted enquiry and emits enquiry.won in the same tx (QUOTED -> WON)', async () => {
+      repo.findById.mockResolvedValue({ ...sample, status: 'QUOTED' });
+      repo.changeStatus.mockResolvedValue({ ...sample, status: 'WON', rowVersion: 2 });
+      const out = await service.changeStatus(ctx, 10, { status: 'WON', rowVersion: 1 });
+      expect(out.status).toBe('WON');
+      // the WON transition threads an enquiry.won outbox event to the repository
+      const [, , version, st, reasonId, event] = repo.changeStatus.mock.calls[0];
+      expect(version).toBe(1);
+      expect(st).toBe('WON');
+      expect(reasonId).toBeNull();
+      expect(event).toMatchObject({ eventType: 'enquiry.won', aggregateType: 'ENQUIRY', aggregateId: 10 });
+    });
+    it('does NOT emit an event on a non-WON transition (QUALIFIED)', async () => {
+      repo.findById.mockResolvedValue(sample);
+      repo.changeStatus.mockResolvedValue({ ...sample, status: 'QUALIFIED', rowVersion: 2 });
+      await service.changeStatus(ctx, 10, { status: 'QUALIFIED', rowVersion: 1 });
+      const [, , , , , event] = repo.changeStatus.mock.calls[0];
+      expect(event).toBeUndefined();
     });
   });
 

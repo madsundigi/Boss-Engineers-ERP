@@ -138,12 +138,13 @@ d('Quotation API (integration) — versioning, approval, PDF, email, enquiry syn
     expect((res.body as Buffer).subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
 
-  it('marks WON and syncs the enquiry to CONVERTED', async () => {
+  it('marks the quotation WON (the enquiry now owns its own status)', async () => {
     const res = await request(app).post(`/api/quotations/${quoteId}/won`).set(hdr(sales)).send({ rowVersion: v });
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('WON');
+    // winning the quote no longer mutates the originating enquiry — it stays QUOTED.
     const enq = await request(app).get(`/api/enquiries/${enqId}`).set(hdr(sales));
-    expect(enq.body.status).toBe('CONVERTED');
+    expect(enq.body.status).toBe('QUOTED');
     v = res.body.rowVersion;
   });
 

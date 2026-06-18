@@ -9,6 +9,7 @@ export interface Project {
   projectName: string;
   customerId: number;
   quotationId: number | null;
+  enquiryId: number | null;
   contractValue: number;
   budgetCost: number;
   pmUserId: number;

@@ -96,8 +96,9 @@ d('Enquiry API (integration)', () => {
       .send({ status: 'QUALIFIED', rowVersion: createdVersion });
     expect(ok.status).toBe(200);
     expect(ok.body.status).toBe('QUALIFIED');
+    // QUALIFIED -> WON is not a legal transition (must go via QUOTED first).
     const bad = await request(app).post(`/api/enquiries/${createdId}/status`).set(hdr(salesUser))
-      .send({ status: 'CONVERTED', rowVersion: ok.body.rowVersion });
+      .send({ status: 'WON', rowVersion: ok.body.rowVersion });
     expect(bad.status).toBe(409);
   });
 

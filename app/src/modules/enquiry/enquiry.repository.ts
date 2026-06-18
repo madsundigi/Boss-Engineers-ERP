@@ -1,5 +1,6 @@
 import { Pool, QueryResultRow } from 'pg';
 import { runInContext, runRead, Queryable } from '../../db/pool';
+import { emitOutbox, OutboxEventInput } from '../../outbox/outbox';
 import { RequestContext } from '../../common/request-context';
 import { Enquiry, EnquiryListResult } from './enquiry.types';
 import { ListQueryDto } from './enquiry.dto';
@@ -180,9 +181,15 @@ export class EnquiryRepository {
     });
   }
 
+  /**
+   * Optimistic-locked status transition. Emits an optional domain event
+   * atomically with the state change (transactional outbox — same pattern as the
+   * project/quotation repos). The service passes `event` only for WON so a
+   * Project is auto-seeded from the enquiry by the relay (FRD §5).
+   */
   async changeStatus(
     ctx: RequestContext, id: number, expectedVersion: number,
-    status: EnquiryStatus, reasonId: number | null,
+    status: EnquiryStatus, reasonId: number | null, event?: OutboxEventInput,
   ): Promise<Enquiry | null> {
     return runInContext(this.pool, ctx, async (client) => {
       const res = await client.query(
@@ -194,7 +201,10 @@ export class EnquiryRepository {
         RETURNING ${COLS}`,
         [status, reasonId, ctx.userId, id, ctx.companyId, expectedVersion],
       );
-      return res.rowCount ? mapRow(res.rows[0]) : null;
+      if (!res.rowCount) return null;
+      // Atomic with the status UPDATE: record the domain event.
+      if (event) await emitOutbox(client, event);
+      return mapRow(res.rows[0]);
     });
   }
 

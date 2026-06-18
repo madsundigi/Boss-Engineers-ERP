@@ -122,14 +122,20 @@ describe('QuotationService', () => {
     });
   });
 
-  describe('won (sync back to enquiry)', () => {
-    it('marks WON and converts the linked enquiry', async () => {
+  describe('won', () => {
+    it('marks WON and emits quotation.won (no enquiry-status mutation)', async () => {
       const d = deps();
       d.repo.findById.mockResolvedValue(quote({ status: 'SENT', enquiryId: 9 }));
       d.repo.updateStatus.mockResolvedValue(quote({ status: 'WON', enquiryId: 9 }));
-      d.enq.findById.mockResolvedValue({ status: 'QUOTED', enquiryId: 9, rowVersion: 3 } as never);
-      await d.svc.markWon(ctx, 1, 1);
-      expect(d.enq.changeStatus).toHaveBeenCalledWith(ctx, 9, 3, 'CONVERTED', null);
+      const out = await d.svc.markWon(ctx, 1, 1);
+      expect(out.status).toBe('WON');
+      // the quote emits its own quotation.won event in the same tx...
+      const [, , version, status, , event] = d.repo.updateStatus.mock.calls[0];
+      expect(version).toBe(1);
+      expect(status).toBe('WON');
+      expect(event).toMatchObject({ eventType: 'quotation.won', aggregateType: 'QUOTATION', aggregateId: 1 });
+      // ...and no longer reaches back to mutate the originating enquiry's status.
+      expect(d.enq.changeStatus).not.toHaveBeenCalled();
     });
   });
 
